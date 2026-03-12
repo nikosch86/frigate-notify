@@ -161,7 +161,10 @@ func processReview(review models.Review) {
 	notifier.SendAlert(detections)
 }
 
-// processGenAIReviewUpdate handles GenAI metadata updates for a review
+// processGenAIReviewUpdate handles GenAI metadata updates for a review.
+// This has its own flow separate from processReview because GenAI updates
+// arrive after the initial notification was already sent, so we must bypass
+// zone cache and other filters that would drop the event as "already notified".
 func processGenAIReviewUpdate(review models.Review) {
 	if !config.ConfigData.Alerts.General.GenAI.Enabled {
 		log.Debug().
@@ -184,13 +187,88 @@ func processGenAIReviewUpdate(review models.Review) {
 		return
 	}
 
-	log.Info().
+	log.Debug().
 		Str("review_id", review.ID).
-		Str("title", review.Data.Metadata.Title).
+		Str("genai_title", review.Data.Metadata.Title).
+		Str("genai_summary", review.Data.Metadata.ShortSummary).
+		Int("genai_threat_level", review.Data.Metadata.PotentialThreatLevel).
 		Msg("Processing GenAI review update")
 
-	// Re-process the review to send an updated notification with GenAI data
-	processReview(review)
+	// Skip audio-only events with no detections
+	if len(review.Data.Detections) == 0 {
+		log.Debug().
+			Str("review_id", review.ID).
+			Msg("GenAI update ignored - no detections to enrich")
+		return
+	}
+
+	// Retrieve detection details from Frigate API (bypass all filters/zone cache)
+	var detections []models.Event
+	for _, id := range review.Data.Detections {
+		url := fmt.Sprintf("%s/api/events/%s", config.ConfigData.Frigate.Server, id)
+
+		response, err := util.HTTPGet(url, config.ConfigData.Frigate.Insecure, "")
+		if err != nil {
+			log.Error().
+				Err(err).
+				Str("review_id", review.ID).
+				Str("detection_id", id).
+				Msg("GenAI update - Unable to retrieve detection information")
+			continue
+		}
+
+		var detection models.Event
+		json.Unmarshal(response, &detection)
+
+		if detection.TopScore == 0 {
+			detection.TopScore = detection.Data.TopScore
+		}
+		detection.CurrentZones = detection.Zones
+		detection.Extra.ReviewLink = config.ConfigData.Frigate.PublicURL + "/review?id=" + review.ID
+
+		detections = append(detections, detection)
+	}
+
+	if len(detections) == 0 {
+		log.Debug().
+			Str("review_id", review.ID).
+			Msg("GenAI update dropped - No detections found")
+		return
+	}
+
+	// Populate GenAI fields from review metadata
+	meta := review.Data.Metadata
+	detections[0].Extra.GenAITitle = meta.Title
+	detections[0].Extra.GenAISummary = meta.ShortSummary
+	detections[0].Extra.GenAIScene = meta.Scene
+
+	switch meta.PotentialThreatLevel {
+	case 0:
+		detections[0].Extra.GenAIThreatLevel = "Normal"
+	case 1:
+		detections[0].Extra.GenAIThreatLevel = "Minor"
+	case 2:
+		detections[0].Extra.GenAIThreatLevel = "Moderate"
+	case 3:
+		detections[0].Extra.GenAIThreatLevel = "High"
+	}
+
+	if len(meta.OtherConcerns) > 0 {
+		detections[0].Extra.GenAIConcerns = strings.Join(meta.OtherConcerns, ", ")
+	}
+
+	if meta.Confidence > 0 {
+		detections[0].Extra.GenAIConfidence = fmt.Sprintf("%v%%", int(meta.Confidence*100))
+	}
+
+	log.Debug().
+		Str("review_id", review.ID).
+		Str("genai_title", meta.Title).
+		Str("genai_threat_level", detections[0].Extra.GenAIThreatLevel).
+		Msg("Sending GenAI-enriched notification")
+
+	// Send notification directly, bypassing zone cache and filters
+	notifier.SendAlert(detections)
 }
 
 func recheckReview(review models.Review) models.Review {
