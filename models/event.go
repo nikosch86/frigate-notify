@@ -27,6 +27,7 @@ type Event struct {
 		Type                        string    `json:"type"`
 		RecognizedLicensePlate      string    `json:"recognized_license_plate"`
 		RecognizedLicensePlateScore float64   `json:"recognized_license_plate_score"`
+		Description                 string    `json:"description"`
 	} `json:"data"`
 	EndTime            interface{} `json:"end_time"`
 	FalsePositive      interface{} `json:"false_positive"`
@@ -65,4 +66,21 @@ type ExtraFields struct {
 	ReviewLink          string
 	CameraName          string
 	Audio               string
+	// GenAI fields
+	GenAITitle       string
+	GenAISummary     string
+	GenAIScene       string
+	GenAIThreatLevel string
+	GenAIConcerns    string
+	GenAIConfidence  string
+	Description      string
+}
+
+// MQTTTrackedObjectUpdate stores incoming MQTT payloads for tracked object updates
+type MQTTTrackedObjectUpdate struct {
+	ID          string `json:"id"`
+	Camera      string `json:"camera"`
+	Label       string `json:"label"`
+	Type        string `json:"type"`
+	Description string `json:"description"`
 }

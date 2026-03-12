@@ -88,24 +88,34 @@ The list below doesn't contain every possible variable, just a few of the most c
 !!! info
     If you're already familiar with Golang templates, check out [event.go](https://github.com/0x2142/frigate-notify/blob/main/models/event.go). Events received from Frigate are parsed into the `Event` struct, so any of those fields can be used within notifications. Please note that the struct is a combined list of possible fields from both web API & MQTT payloads, which are slightly different. So there may be a few that are only available if you're using the web API event retrieval method, for example.
 
-| Variable Name          | Description                                                                                                              |
-|------------------------|--------------------------------------------------------------------------------------------------------------------------|
-| .Camera                | Name of camera                                                                                                           |
-| .HasClip               | Reports `true` if clip is available                                                                                      |
-| .HasSnapshot           | Reports `true` if snapshot is available                                                                                  |
-| .ID                    | Frigate event ID                                                                                                         |
-| .Label                 | Label of detected object                                                                                                 |
-| .StartTime             | Unix timestamp of event start                                                                                            |
-| .EndTime               | Unix timestamp of event end                                                                                              |
-| .Extra.FormattedTime   | Converted & formatted timestamp of event start <br /> (Uses `alerts > general > timeformat` config setting if specified) |
-| .Extra.UnixStartTime   | Unix timestamp of event start time                                                                                       |
-| .Extra.CameraName      | Title case transform of camera name (ex. "side_door" becomes "Side Door")                                                |
-| .Extra.TopScorePercent | Percent confidence of object detection label                                                                             |
-| .Extra.ZoneList        | List of current zones object is in                                                                                       |
-| .Extra.LocalURL        | Frigate server URL as specified under `frigate > server`                                                                 |
-| .Extra.PublicURL       | Frigate Public URL as specified under `frigate > public_url`                                                             |
-| .Extra.EventLink       | Link directly to an event clip |
-| .Extra.ReviewLink      | Link directly to a review item, if MQTT `mode` is `reviews` |
+| Variable Name              | Description                                                                                                              |
+|----------------------------|--------------------------------------------------------------------------------------------------------------------------|
+| .Camera                    | Name of camera                                                                                                           |
+| .HasClip                   | Reports `true` if clip is available                                                                                      |
+| .HasSnapshot               | Reports `true` if snapshot is available                                                                                  |
+| .ID                        | Frigate event ID                                                                                                         |
+| .Label                     | Label of detected object                                                                                                 |
+| .StartTime                 | Unix timestamp of event start                                                                                            |
+| .EndTime                   | Unix timestamp of event end                                                                                              |
+| .Extra.FormattedTime       | Converted & formatted timestamp of event start <br /> (Uses `alerts > general > timeformat` config setting if specified) |
+| .Extra.UnixStartTime       | Unix timestamp of event start time                                                                                       |
+| .Extra.CameraName          | Title case transform of camera name (ex. "side_door" becomes "Side Door")                                                |
+| .Extra.TopScorePercent     | Percent confidence of object detection label                                                                             |
+| .Extra.ZoneList            | List of current zones object is in                                                                                       |
+| .Extra.LocalURL            | Frigate server URL as specified under `frigate > server`                                                                 |
+| .Extra.PublicURL           | Frigate Public URL as specified under `frigate > public_url`                                                             |
+| .Extra.EventLink           | Link directly to an event clip |
+| .Extra.ReviewLink          | Link directly to a review item, if MQTT `mode` is `reviews` |
+| .Extra.GenAITitle          | GenAI-generated title for the event (e.g. "Person approaching front door") |
+| .Extra.GenAISummary        | GenAI-generated short summary of the event |
+| .Extra.GenAIScene          | GenAI-generated detailed scene narrative |
+| .Extra.GenAIThreatLevel    | GenAI threat assessment: "Normal", "Minor", "Moderate", or "High" |
+| .Extra.GenAIConcerns       | GenAI-identified concerns, comma-separated |
+| .Extra.GenAIConfidence     | GenAI confidence as percentage (e.g. "85%") |
+| .Extra.Description         | GenAI-generated object description |
+
+!!! note
+    GenAI variables are only populated when Frigate has [GenAI](https://docs.frigate.video/configuration/genai/) configured and the event has GenAI metadata available. When no GenAI data is present, these variables will be empty strings. Use conditional template logic (e.g. `{{ if ge (len .Extra.GenAITitle) 1 }}...{{ end }}`) to handle this gracefully.
 
 ## Environment variables
 

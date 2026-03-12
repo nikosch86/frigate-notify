@@ -237,6 +237,19 @@ All alert providers (Discord, Gotify, etc) also support optional filters & the a
     - Specify what to do with events that only contain audio detection
     - By default, these events will generate notifications
     - Set to `drop` to silently drop these events & not send notifications
+- **genai** (Optional)
+    - Settings for Frigate's [GenAI](https://docs.frigate.video/configuration/genai/) feature support
+    - When Frigate has GenAI configured, it generates AI descriptions for review events including a title, scene summary, threat level, and object descriptions
+    - These are automatically included in notifications when available
+    - **enabled** (Optional - Default: `true`)
+        - Env: `FN_ALERTS__GENERAL__GENAI__ENABLED`
+        - Set to `false` to exclude GenAI data from notifications
+        - When enabled, notifications will include AI-generated title, summary, threat level, and other GenAI metadata when available from Frigate
+    - **update_notif** (Optional - Default: `true`)
+        - Env: `FN_ALERTS__GENERAL__GENAI__UPDATE_NOTIF`
+        - GenAI data may arrive after the initial notification has already been sent
+        - Set to `true` to send an updated notification when GenAI data becomes available
+        - Set to `false` to only include GenAI data if it is available at the time of the initial notification
 
 ```yaml title="Config File Snippet"
 alerts:
@@ -252,6 +265,9 @@ alerts:
     notify_once:
     notify_detections:
     audio_only:
+    genai:
+      enabled: true
+      update_notif: true
 ```
 
 ### Quiet Hours
@@ -923,7 +939,7 @@ alerts:
     "time": "",
     "id": "",
     "camera": "",
-    "label": "", 
+    "label": "",
     "score": "",
     "current_zones": "",
     "entered_zones": "",
@@ -932,10 +948,21 @@ alerts:
     "links": {
          "camera": "",
          "clip": "",
-         "snapshot": "",
+         "snapshot": ""
     },
+    "genai": {
+         "title": "",
+         "summary": "",
+         "description": "",
+         "threat_level": "",
+         "confidence": "",
+         "concerns": ""
+    }
 }
 ```
+
+!!! note
+    The `genai` field is only included when GenAI data is available from Frigate. If Frigate does not have GenAI configured or no GenAI data is present for the event, this field will be omitted.
 
 - **enabled** (Optional - Default: `false`)
     - Env: `FN_ALERTS__WEBHOOK__ENABLED`

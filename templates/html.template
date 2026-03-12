@@ -5,6 +5,12 @@ Camera: {{ .Extra.CameraName }}<br />
 {{ if ge (len .Extra.LicensePlateList) 1 }}License Plate(s): {{ .Extra.LicensePlateList }}<br />{{ end }}
 {{ if ge (len .Extra.Audio) 1 }}Audio: {{ .Extra.Audio }}<br />{{ end }}
 {{ if ge (len .Zones) 1 }}Zone(s): {{ .Extra.ZoneList }}
+{{ end }}{{ if ge (len .Extra.GenAITitle) 1 }}<br />
+<b>{{ .Extra.GenAITitle }}</b><br />
+{{ end }}{{ if ge (len .Extra.GenAISummary) 1 }}{{ .Extra.GenAISummary }}<br />
+{{ end }}{{ if ge (len .Extra.Description) 1 }}Description: {{ .Extra.Description }}<br />
+{{ end }}{{ if ge (len .Extra.GenAIThreatLevel) 1 }}Threat Level: {{ .Extra.GenAIThreatLevel }}<br />
+{{ end }}{{ if ge (len .Extra.GenAIConcerns) 1 }}Concerns: {{ .Extra.GenAIConcerns }}<br />
 {{ end }}
 <br />
 Links: <a href="{{if ge .Extra.FrigateMajorVersion 14 }}{{ .Extra.PublicURL }}/#{{ .Camera }}{{ else }}{{ .Extra.PublicURL }}/cameras/{{ .Camera }}{{ end }}">Camera</a>{{ if ne .Extra.ReviewLink "" }} | <a href="{{ .Extra.ReviewLink }}">Review Event</a>{{ else }}{{ if .HasClip }} | <a href="{{ .Extra.EventLink }}">Event Clip</a> <br />{{ end }}{{ end }}

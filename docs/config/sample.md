@@ -49,6 +49,9 @@ alerts:
     notify_detections:
     recheck_delay:
     audio_only:
+    genai:
+      enabled: true
+      update_notif: true
 
   quiet:
     start:

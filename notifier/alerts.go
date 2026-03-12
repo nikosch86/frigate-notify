@@ -328,6 +328,9 @@ func setExtras(events []models.Event) models.Event {
 	// Calc License Plate score percentage
 	key.Extra.LicensePlatePercent = fmt.Sprintf("%v%%", int((key.Data.RecognizedLicensePlateScore * 100)))
 
+	// GenAI object description
+	key.Extra.Description = key.Data.Description
+
 	return key
 }
 
