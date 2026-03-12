@@ -109,6 +109,12 @@ alerts:
     # Allow audio-only events (no object detection)
     # Set to `drop` to disallow this
     audio_only: allow
+    # GenAI settings for Frigate's AI-generated descriptions
+    genai:
+      # Include GenAI data (title, summary, threat level, etc.) in notifications (Default: true)
+      enabled: true
+      # Send updated notification when GenAI data arrives after initial alert (Default: true)
+      update_notif: true
 
   # If configured, ignore events between times below
   quiet:

@@ -14,6 +14,7 @@ import (
 )
 
 var mqtt_topic string
+var mqtt_tracked_object_topic string
 var client mqtt.Client
 
 // SubscribeMQTT establishes subscription to MQTT server & listens for messages
@@ -21,6 +22,7 @@ func SubscribeMQTT() {
 	config.Internal.Status.Health = "frigate mqtt connecting"
 	config.Internal.Status.Frigate.MQTT = "connecting"
 	mqtt_topic = fmt.Sprintf("%s/%s", config.ConfigData.Frigate.MQTT.TopicPrefix, strings.ToLower(config.ConfigData.App.Mode))
+	mqtt_tracked_object_topic = fmt.Sprintf("%s/tracked_object_update", config.ConfigData.Frigate.MQTT.TopicPrefix)
 	// MQTT client configuration
 	mqttServer := fmt.Sprintf("tcp://%s:%d", config.ConfigData.Frigate.MQTT.Server, config.ConfigData.Frigate.MQTT.Port)
 	opts := mqtt.NewClientOptions()
@@ -95,8 +97,14 @@ func connectHandler(client mqtt.Client) {
 		log.Error().Msgf("Failed to subscribe to topic: %s", mqtt_topic)
 		time.Sleep(10 * time.Second)
 	}
-
 	log.Info().Msgf("Subscribed to MQTT topic: %s", mqtt_topic)
+
+	// Subscribe to tracked_object_update for GenAI object descriptions
+	if subscription := client.Subscribe(mqtt_tracked_object_topic, 0, handleMQTTMsg); subscription.Wait() && subscription.Error() != nil {
+		log.Warn().Msgf("Failed to subscribe to topic: %s", mqtt_tracked_object_topic)
+	} else {
+		log.Info().Msgf("Subscribed to MQTT topic: %s", mqtt_tracked_object_topic)
+	}
 }
 
 // handleMQTTMsg processes incoming MQTT messages depending on topic
@@ -124,6 +132,11 @@ func handleMQTTMsg(client mqtt.Client, msg mqtt.Message) {
 				Str("review_id", review.After.ID).
 				Msg("Review update received")
 			processReview(review.After.Review)
+		case "genai":
+			log.Debug().
+				Str("review_id", review.After.ID).
+				Msg("GenAI review update received")
+			processGenAIReviewUpdate(review.After.Review)
 		case "end":
 			log.Debug().
 				Str("review_id", review.After.ID).
@@ -158,5 +171,15 @@ func handleMQTTMsg(client mqtt.Client, msg mqtt.Message) {
 			delZoneAlerted(event.After.Event)
 		}
 
+	case "tracked_object_update":
+		var update models.MQTTTrackedObjectUpdate
+		json.Unmarshal(msg.Payload(), &update)
+
+		if update.Type == "description" {
+			log.Debug().
+				Str("event_id", update.ID).
+				Str("camera", update.Camera).
+				Msg("Tracked object description update received")
+		}
 	}
 }

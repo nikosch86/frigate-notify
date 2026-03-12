@@ -123,8 +123,74 @@ func processReview(review models.Review) {
 		return
 	}
 
+	// Populate GenAI fields from review metadata if available and enabled
+	if config.ConfigData.Alerts.General.GenAI.Enabled && review.Data.Metadata != nil {
+		meta := review.Data.Metadata
+		detections[0].Extra.GenAITitle = meta.Title
+		detections[0].Extra.GenAISummary = meta.ShortSummary
+		detections[0].Extra.GenAIScene = meta.Scene
+
+		// Convert threat level int to human-readable string
+		switch meta.PotentialThreatLevel {
+		case 0:
+			detections[0].Extra.GenAIThreatLevel = "Normal"
+		case 1:
+			detections[0].Extra.GenAIThreatLevel = "Minor"
+		case 2:
+			detections[0].Extra.GenAIThreatLevel = "Moderate"
+		case 3:
+			detections[0].Extra.GenAIThreatLevel = "High"
+		}
+
+		if len(meta.OtherConcerns) > 0 {
+			detections[0].Extra.GenAIConcerns = strings.Join(meta.OtherConcerns, ", ")
+		}
+
+		if meta.Confidence > 0 {
+			detections[0].Extra.GenAIConfidence = fmt.Sprintf("%v%%", int(meta.Confidence*100))
+		}
+
+		log.Debug().
+			Str("review_id", review.ID).
+			Str("genai_title", meta.Title).
+			Str("genai_threat_level", detections[0].Extra.GenAIThreatLevel).
+			Msg("GenAI metadata applied to notification")
+	}
+
 	// Send alert with snapshot
 	notifier.SendAlert(detections)
+}
+
+// processGenAIReviewUpdate handles GenAI metadata updates for a review
+func processGenAIReviewUpdate(review models.Review) {
+	if !config.ConfigData.Alerts.General.GenAI.Enabled {
+		log.Debug().
+			Str("review_id", review.ID).
+			Msg("GenAI update ignored - GenAI is disabled")
+		return
+	}
+
+	if !config.ConfigData.Alerts.General.GenAI.UpdateNotif {
+		log.Debug().
+			Str("review_id", review.ID).
+			Msg("GenAI update ignored - update_notif is disabled")
+		return
+	}
+
+	if review.Data.Metadata == nil {
+		log.Debug().
+			Str("review_id", review.ID).
+			Msg("GenAI update ignored - no metadata present")
+		return
+	}
+
+	log.Info().
+		Str("review_id", review.ID).
+		Str("title", review.Data.Metadata.Title).
+		Msg("Processing GenAI review update")
+
+	// Re-process the review to send an updated notification with GenAI data
+	processReview(review)
 }
 
 func recheckReview(review models.Review) models.Review {

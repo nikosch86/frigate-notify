@@ -90,7 +90,13 @@ type General struct {
 	NotifyOnce       bool   `koanf:"notify_once,omitempty"  json:"notify_once" enum:"true,false" doc:"Only notify once per event (For app mode: events)" default:"false"`
 	NotifyDetections bool   `koanf:"notify_detections,omitempty" json:"notify_detections" enum:"true,false" doc:"Enable notifications on detection (For app mode: reviews)" default:"false"`
 	RecheckDelay     int    `koanf:"recheck_delay" json:"recheck_delay,omitempty" default:"0" doc:"Delay before re-checking event details from Frigate"`
-	AudioOnly        string `koanf:"audio_only" json:"audio_only,omitempty" enum:"allow,drop" doc:"Allow/Drop events that only contain audio detections" default:"allow"`
+	AudioOnly        string      `koanf:"audio_only" json:"audio_only,omitempty" enum:"allow,drop" doc:"Allow/Drop events that only contain audio detections" default:"allow"`
+	GenAI            GenAIConfig `koanf:"genai" json:"genai,omitempty" doc:"GenAI feature settings"`
+}
+
+type GenAIConfig struct {
+	Enabled     bool `koanf:"enabled" json:"enabled" enum:"true,false" doc:"Include GenAI data in notifications" default:"true"`
+	UpdateNotif bool `koanf:"update_notif" json:"update_notif" enum:"true,false" doc:"Send updated notification when GenAI data arrives after initial alert" default:"true"`
 }
 
 type LicensePlate struct {

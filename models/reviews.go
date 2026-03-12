@@ -18,10 +18,22 @@ type Review struct {
 	Severity  string  `json:"severity"`
 	ThumbPath string  `json:"thumb_path"`
 	Data      struct {
-		Detections []string `json:"detections"`
-		Objects    []string `json:"objects"`
-		SubLabels  []string `json:"sub_labels"`
-		Zones      []string `json:"zones"`
-		Audio      []string `json:"audio"`
+		Detections []string        `json:"detections"`
+		Objects    []string        `json:"objects"`
+		SubLabels  []string        `json:"sub_labels"`
+		Zones      []string        `json:"zones"`
+		Audio      []string        `json:"audio"`
+		Metadata   *ReviewMetadata `json:"metadata,omitempty"`
 	}
+}
+
+// ReviewMetadata contains GenAI-generated review data from Frigate
+type ReviewMetadata struct {
+	Title               string   `json:"title"`
+	Scene               string   `json:"scene"`
+	ShortSummary        string   `json:"shortSummary"`
+	Confidence          float64  `json:"confidence"`
+	PotentialThreatLevel int     `json:"potential_threat_level"`
+	OtherConcerns       []string `json:"other_concerns"`
+	Time                string   `json:"time"`
 }
