@@ -8,7 +8,6 @@ Camera: {{ .Extra.CameraName }}<br />
 {{ end }}{{ if ge (len .Extra.GenAITitle) 1 }}<br />
 <b>{{ .Extra.GenAITitle }}</b><br />
 {{ end }}{{ if ge (len .Extra.GenAISummary) 1 }}{{ .Extra.GenAISummary }}<br />
-{{ end }}{{ if ge (len .Extra.Description) 1 }}Description: {{ .Extra.Description }}<br />
 {{ end }}{{ if ge (len .Extra.GenAIThreatLevel) 1 }}Threat Level: {{ .Extra.GenAIThreatLevel }}<br />
 {{ end }}{{ if ge (len .Extra.GenAIConcerns) 1 }}Concerns: {{ .Extra.GenAIConcerns }}<br />
 {{ end }}
