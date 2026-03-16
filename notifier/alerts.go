@@ -23,6 +23,11 @@ import (
 
 var TemplateFiles embed.FS
 
+// NotifCacheSet and NotifCacheGet are set by the events package to avoid circular imports.
+// They provide access to the notification message ID cache.
+var NotifCacheSet func(reviewID, provider, messageID string)
+var NotifCacheGet func(reviewID, provider string) string
+
 type notifMeta struct {
 	name  string
 	index int
@@ -31,6 +36,11 @@ type notifMeta struct {
 // SendAlert forwards alert information to all enabled alerting methods
 func SendAlert(events []models.Event) {
 	config.Internal.Status.LastNotification = time.Now()
+
+	// Reset summary idle timer (skip for GenAI updates to avoid re-triggering)
+	if len(events) > 0 && !events[0].Extra.IsGenAIUpdate {
+		ResetSummaryTimer()
+	}
 
 	// Collect snapshot, if available
 	var snapshot io.Reader

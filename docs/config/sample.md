@@ -52,6 +52,7 @@ alerts:
     genai:
       enabled: true
       update_notif: true
+      summary_idle_time: 300
 
   quiet:
     start:

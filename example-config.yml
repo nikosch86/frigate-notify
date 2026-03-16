@@ -115,6 +115,9 @@ alerts:
       enabled: true
       # Send updated notification when GenAI data arrives after initial alert (Default: true)
       update_notif: true
+      # Seconds of inactivity after notifications stop before requesting a GenAI activity summary
+      # from Frigate covering the entire activity period across all cameras (Default: 300, 0 to disable)
+      summary_idle_time: 300
 
   # If configured, ignore events between times below
   quiet:

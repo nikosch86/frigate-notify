@@ -74,6 +74,9 @@ type ExtraFields struct {
 	GenAIConcerns    string
 	GenAIConfidence  string
 	Description      string
+	// Used internally for GenAI update flow
+	ReviewID      string
+	IsGenAIUpdate bool
 }
 
 // MQTTTrackedObjectUpdate stores incoming MQTT payloads for tracked object updates

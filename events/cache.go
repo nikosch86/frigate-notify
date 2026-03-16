@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/0x2142/frigate-notify/models"
+	"github.com/0x2142/frigate-notify/notifier"
 	"github.com/rs/zerolog/log"
 
 	"github.com/maypok86/otter"
@@ -33,6 +34,10 @@ func InitZoneCache() {
 			Msg("Error setting up notification cache")
 	}
 	log.Debug().Msg("Notification cache ready")
+
+	// Wire up cache functions for notifier package to avoid circular imports
+	notifier.NotifCacheSet = SetNotifSent
+	notifier.NotifCacheGet = GetNotifMessageID
 }
 
 func CloseZoneCache() {

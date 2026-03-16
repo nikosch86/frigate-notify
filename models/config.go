@@ -95,8 +95,9 @@ type General struct {
 }
 
 type GenAIConfig struct {
-	Enabled     bool `koanf:"enabled" json:"enabled" enum:"true,false" doc:"Include GenAI data in notifications" default:"true"`
-	UpdateNotif bool `koanf:"update_notif" json:"update_notif" enum:"true,false" doc:"Send updated notification when GenAI data arrives after initial alert" default:"true"`
+	Enabled         bool `koanf:"enabled" json:"enabled" enum:"true,false" doc:"Include GenAI data in notifications" default:"true"`
+	UpdateNotif     bool `koanf:"update_notif" json:"update_notif" enum:"true,false" doc:"Send updated notification when GenAI data arrives after initial alert" default:"true"`
+	SummaryIdleTime int  `koanf:"summary_idle_time" json:"summary_idle_time,omitempty" doc:"Seconds of inactivity after notifications before requesting a GenAI summary from Frigate (0 to disable)" default:"300"`
 }
 
 type LicensePlate struct {

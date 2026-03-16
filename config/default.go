@@ -57,8 +57,9 @@ var DefaultConfig Config = Config{
 			RecheckDelay:     0,
 			AudioOnly:        "allow",
 			GenAI: models.GenAIConfig{
-				Enabled:     true,
-				UpdateNotif: true,
+				Enabled:         true,
+				UpdateNotif:     true,
+				SummaryIdleTime: 300,
 			},
 		},
 		Quiet: models.Quiet{

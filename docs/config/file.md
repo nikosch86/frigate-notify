@@ -250,6 +250,12 @@ All alert providers (Discord, Gotify, etc) also support optional filters & the a
         - GenAI data may arrive after the initial notification has already been sent
         - Set to `true` to send an updated notification when GenAI data becomes available
         - Set to `false` to only include GenAI data if it is available at the time of the initial notification
+    - **summary_idle_time** (Optional - Default: `300`)
+        - Env: `FN_ALERTS__GENERAL__GENAI__SUMMARY_IDLE_TIME`
+        - After a burst of activity, when no new notifications have been sent for this many seconds, request a GenAI activity summary from Frigate
+        - The summary covers all events across all cameras during the activity period
+        - Requires Frigate to have a GenAI provider configured
+        - Set to `0` to disable activity summaries
 
 ```yaml title="Config File Snippet"
 alerts:
@@ -268,6 +274,7 @@ alerts:
     genai:
       enabled: true
       update_notif: true
+      summary_idle_time: 300
 ```
 
 ### Quiet Hours

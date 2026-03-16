@@ -123,6 +123,9 @@ func processReview(review models.Review) {
 		return
 	}
 
+	// Set ReviewID for notification cache tracking
+	detections[0].Extra.ReviewID = review.ID
+
 	// Populate GenAI fields from review metadata if available and enabled
 	if config.ConfigData.Alerts.General.GenAI.Enabled && review.Data.Metadata != nil {
 		meta := review.Data.Metadata
@@ -260,6 +263,10 @@ func processGenAIReviewUpdate(review models.Review) {
 	if meta.Confidence > 0 {
 		detections[0].Extra.GenAIConfidence = fmt.Sprintf("%v%%", int(meta.Confidence*100))
 	}
+
+	// Mark as GenAI update so providers can edit existing messages
+	detections[0].Extra.ReviewID = review.ID
+	detections[0].Extra.IsGenAIUpdate = true
 
 	log.Debug().
 		Str("review_id", review.ID).
