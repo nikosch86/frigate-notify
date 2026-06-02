@@ -29,6 +29,12 @@ func SubscribeMQTT() {
 	opts.AddBroker(mqttServer)
 	opts.SetClientID(config.ConfigData.Frigate.MQTT.ClientID)
 	opts.SetAutoReconnect(true)
+	// Run each message handler in its own goroutine (paho default is true, which
+	// serializes all handlers on a single router goroutine). Our handlers make
+	// synchronous HTTP calls to Frigate (detail fetches, snapshots, rechecks); a
+	// cold or slow Frigate would otherwise block the router and freeze the entire
+	// MQTT pump - and starve keepalive pings, tripping a disconnect loop.
+	opts.SetOrderMatters(false)
 	opts.SetConnectionLostHandler(connectionLostHandler)
 	opts.SetOnConnectHandler(connectHandler)
 	if config.ConfigData.Frigate.MQTT.Username != "" && config.ConfigData.Frigate.MQTT.Password != "" {
@@ -45,25 +51,29 @@ func SubscribeMQTT() {
 		Bool("auto_reconnect", true).
 		Msg("Init MQTT connection")
 
-	var subscribed = false
-	var retry = 0
-	for !subscribed {
+	// Connect to MQTT broker, retrying indefinitely with capped backoff.
+	// A broker that is slow to appear on host boot (e.g. dependency ordering
+	// after a reboot) must not kill the process - once connected, AutoReconnect
+	// handles any later disconnects.
+	backoff := 10 * time.Second
+	const maxBackoff = 60 * time.Second
+	for {
 		config.Internal.Status.Health = "frigate mqtt unable to connect"
 		config.Internal.Status.Frigate.MQTT = "unreachable"
-		if retry >= 3 {
-			log.Fatal().Msgf("Max retries exceeded. Failed to establish MQTT session to %s", config.ConfigData.Frigate.MQTT.Server)
-		}
+
 		// Connect to MQTT broker
 		client = mqtt.NewClient(opts)
 
 		if token := client.Connect(); token.Wait() && token.Error() != nil {
-			retry += 1
-			config.Internal.Status.Health = "frigate mqtt unable to connect"
-			config.Internal.Status.Frigate.MQTT = "unreachable"
-
 			log.Warn().Msgf("Could not connect to MQTT at %v: %v", config.ConfigData.Frigate.MQTT.Server, token.Error())
-			log.Warn().Msgf("Retrying in 10 seconds. Attempt %v of 3.", retry)
-			time.Sleep(10 * time.Second)
+			log.Warn().Msgf("Retrying in %v.", backoff)
+			time.Sleep(backoff)
+			if backoff < maxBackoff {
+				backoff *= 2
+				if backoff > maxBackoff {
+					backoff = maxBackoff
+				}
+			}
 			continue
 		}
 		return

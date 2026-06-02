@@ -87,10 +87,10 @@ func onSummaryIdle() {
 }
 
 func requestFrigateSummary(start, end time.Time) (string, error) {
-	url := fmt.Sprintf("%s/api/review/summarize/start/%v/end/%v",
+	url := fmt.Sprintf("%s/api/review/summarize/start/%d/end/%d",
 		config.ConfigData.Frigate.Server,
-		float64(start.Unix()),
-		float64(end.Unix()),
+		start.Unix(),
+		end.Unix(),
 	)
 
 	log.Debug().
