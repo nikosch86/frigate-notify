@@ -30,8 +30,10 @@ var ConfigData Config
 var ConfigFile string
 var k = koanf.New(".")
 
-// Load opens & attempts to parse configuration file
-func Load() {
+// Load opens & attempts to parse configuration file, returning any validation
+// errors. Callers decide how to act on an invalid config: startup aborts, while
+// a runtime reload keeps the previously-running config.
+func Load() []string {
 	// Set config file location
 	if ConfigFile == "" {
 		var ok bool
@@ -88,10 +90,11 @@ func Load() {
 			log.Error().Msgf(" - %v", msg)
 		}
 		fmt.Println()
-		log.Fatal().Msg("Please fix config errors before restarting app.")
 	} else {
 		log.Info().Msg("Config file validated!")
 	}
+
+	return validationErrors
 }
 
 func Save(skipBackup bool) {

@@ -171,6 +171,8 @@ alerts:
     enabled: false
     chatid:
     send_clip:
+    send_clip_after_snapshot:
+    clip_max_size:
     message_thread_id:
     token:
     template:

@@ -26,8 +26,16 @@ func PostReload(ctx context.Context, input *struct{}) (*ReloadOutput, error) {
 	go func() {
 		log.Info().Msg("Received request to reload config")
 		// Re-load from file & trigger reload
+		previous := config.ConfigData
 		config.ConfigData = config.Config{}
-		config.Load()
+		if errs := config.Load(); len(errs) > 0 {
+			// Keep the running config rather than crashing the app
+			log.Error().
+				Strs("errors", errs).
+				Msg("Config reload aborted due to validation errors, keeping previous config")
+			config.ConfigData = previous
+			return
+		}
 		newconfig := config.ConfigData
 		go reloadCfg(newconfig, true, true)
 	}()

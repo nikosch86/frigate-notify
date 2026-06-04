@@ -79,17 +79,17 @@ type Alerts struct {
 }
 
 type General struct {
-	Title            string `koanf:"title" json:"title,omitempty" doc:"Notification title" default:"Frigate Alert"`
-	TimeFormat       string `koanf:"timeformat" json:"timeformat,omitempty" doc:"Time format used in notifications" default:""`
-	NoSnap           string `koanf:"nosnap,omitempty" json:"nosnap" enum:"allow,drop" doc:"Allow/Drop events if they do not have a snapshot" default:"allow"`
-	SnapBbox         bool   `koanf:"snap_bbox,omitempty" json:"snap_bbox" enum:"true,false" doc:"Include bounding box on snapshots" default:"false"`
-	SnapTimestamp    bool   `koanf:"snap_timestamp,omitempty" json:"snap_timestamp" enum:"true,false" doc:"Include timestamp on snapshots" default:"false"`
-	SnapCrop         bool   `koanf:"snap_crop,omitempty"  json:"snap_crop" enum:"true,false" doc:"Crop snapshots" default:"false"`
-	SnapHiRes        bool   `koanf:"snap_hires" json:"snap_hires,omitempty" enum:"true,false" doc:"Collect snapshot from camera recording stream" default:"false"`
-	MaxSnapRetry     int    `koanf:"max_snap_retry,omitempty" json:"max_snap_retry" doc:"Maximum number of retry attempts when snapshot is not ready yet" default:"10"`
-	NotifyOnce       bool   `koanf:"notify_once,omitempty"  json:"notify_once" enum:"true,false" doc:"Only notify once per event (For app mode: events)" default:"false"`
-	NotifyDetections bool   `koanf:"notify_detections,omitempty" json:"notify_detections" enum:"true,false" doc:"Enable notifications on detection (For app mode: reviews)" default:"false"`
-	RecheckDelay     int    `koanf:"recheck_delay" json:"recheck_delay,omitempty" default:"0" doc:"Delay before re-checking event details from Frigate"`
+	Title            string      `koanf:"title" json:"title,omitempty" doc:"Notification title" default:"Frigate Alert"`
+	TimeFormat       string      `koanf:"timeformat" json:"timeformat,omitempty" doc:"Time format used in notifications" default:""`
+	NoSnap           string      `koanf:"nosnap,omitempty" json:"nosnap" enum:"allow,drop" doc:"Allow/Drop events if they do not have a snapshot" default:"allow"`
+	SnapBbox         bool        `koanf:"snap_bbox,omitempty" json:"snap_bbox" enum:"true,false" doc:"Include bounding box on snapshots" default:"false"`
+	SnapTimestamp    bool        `koanf:"snap_timestamp,omitempty" json:"snap_timestamp" enum:"true,false" doc:"Include timestamp on snapshots" default:"false"`
+	SnapCrop         bool        `koanf:"snap_crop,omitempty"  json:"snap_crop" enum:"true,false" doc:"Crop snapshots" default:"false"`
+	SnapHiRes        bool        `koanf:"snap_hires" json:"snap_hires,omitempty" enum:"true,false" doc:"Collect snapshot from camera recording stream" default:"false"`
+	MaxSnapRetry     int         `koanf:"max_snap_retry,omitempty" json:"max_snap_retry" doc:"Maximum number of retry attempts when snapshot is not ready yet" default:"10"`
+	NotifyOnce       bool        `koanf:"notify_once,omitempty"  json:"notify_once" enum:"true,false" doc:"Only notify once per event (For app mode: events)" default:"false"`
+	NotifyDetections bool        `koanf:"notify_detections,omitempty" json:"notify_detections" enum:"true,false" doc:"Enable notifications on detection (For app mode: reviews)" default:"false"`
+	RecheckDelay     int         `koanf:"recheck_delay" json:"recheck_delay,omitempty" default:"0" doc:"Delay before re-checking event details from Frigate"`
 	AudioOnly        string      `koanf:"audio_only" json:"audio_only,omitempty" enum:"allow,drop" doc:"Allow/Drop events that only contain audio detections" default:"allow"`
 	GenAI            GenAIConfig `koanf:"genai" json:"genai,omitempty" doc:"GenAI feature settings"`
 }
@@ -224,11 +224,13 @@ type SMTP struct {
 }
 
 type Telegram struct {
-	AlertCommon     `koanf:",squash"`
-	ChatID          int64  `koanf:"chatid" json:"chatid,omitempty" doc:"Telegram chat ID" default:"0"`
-	MessageThreadID int    `koanf:"message_thread_id" json:"message_thread_id,omitempty" doc:"Send message to thread by ID" default:"0"`
-	Token           string `koanf:"token" json:"token,omitempty" doc:"Telegram bot token" default:""`
-	SendClip        bool   `koanf:"send_clip" json:"send_clip,omitempty" doc:"Send event video clip instead of snapshot image" default:"false"`
+	AlertCommon           `koanf:",squash"`
+	ChatID                int64  `koanf:"chatid" json:"chatid,omitempty" doc:"Telegram chat ID" default:"0"`
+	MessageThreadID       int    `koanf:"message_thread_id" json:"message_thread_id,omitempty" doc:"Send message to thread by ID" default:"0"`
+	Token                 string `koanf:"token" json:"token,omitempty" doc:"Telegram bot token" default:""`
+	SendClip              bool   `koanf:"send_clip" json:"send_clip,omitempty" doc:"Send event video clip instead of snapshot image" default:"false"`
+	SendClipAfterSnapshot bool   `koanf:"send_clip_after_snapshot" json:"send_clip_after_snapshot,omitempty" doc:"Send snapshot first, then replace it with the event video clip once available (within clip_max_size)" default:"false"`
+	ClipMaxSize           int    `koanf:"clip_max_size" json:"clip_max_size,omitempty" doc:"Maximum clip size (MB) to upload when replacing the snapshot. Telegram's cloud Bot API caps uploads at 50 MB; a self-hosted local Bot API server allows up to 2000 MB" default:"50"`
 }
 
 type Webhook struct {

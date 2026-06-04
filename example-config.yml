@@ -335,6 +335,13 @@ alerts:
     chatid:
     # Set to `true` to send short event video clip instead of snapshot image
     send_clip:
+    # Set to `true` to send the snapshot first, then replace it in-place with the
+    # event video clip once available (keeps the snapshot if the clip is missing or
+    # larger than `clip_max_size`). Takes precedence over `send_clip`.
+    send_clip_after_snapshot:
+    # Max clip size (MB) to upload when replacing the snapshot. Telegram's cloud Bot
+    # API caps uploads at 50 MB; a self-hosted local Bot API server allows up to 2000.
+    clip_max_size:
     # Message Thead ID
     message_thread_id:
     # Bot API token

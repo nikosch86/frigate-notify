@@ -917,6 +917,16 @@ Within the response, locate your message to the bot, then grab the ID under `mes
     - Env: `FN_ALERTS__TELEGRAM__SEND_CLIP`
     - Optionally send event video clip instead of snapshot image
     - **Note**: Clips may take a short while to become available. Use [`max_snap_retry`](#general) to control how long frigate-notify will wait for the clip to become available
+- **send_clip_after_snapshot** (Optional - Default: `false`)
+    - Env: `FN_ALERTS__TELEGRAM__SEND_CLIP_AFTER_SNAPSHOT`
+    - Optionally send the snapshot image immediately, then replace that same message with the event video clip once it becomes available
+    - Unlike `send_clip` (which waits for the clip before sending anything), this delivers the snapshot right away and upgrades it to video in-place — so a fast notification is always sent, and the snapshot is kept if the clip never becomes available or exceeds `clip_max_size`
+    - Takes precedence over `send_clip` when both are enabled
+    - **Note**: Clips may take a short while to become available. Use [`max_snap_retry`](#general) to control how long frigate-notify will wait for the clip to become available
+- **clip_max_size** (Optional - Default: `50`)
+    - Env: `FN_ALERTS__TELEGRAM__CLIP_MAX_SIZE`
+    - Maximum clip size, in MB, that will be uploaded when replacing the snapshot via `send_clip_after_snapshot`. Larger clips are skipped and the snapshot is kept
+    - Telegram's cloud Bot API caps bot uploads at **50 MB**. If you run a [self-hosted Local Bot API server](https://core.telegram.org/bots/api#using-a-local-bot-api-server) you can raise this up to `2000`
 - **message_thread_id** (Optional)
     - Env: `FN_ALERTS__TELEGRAM__MESSAGE_THREAD_ID`
     - Optionally send notification to a message thread by ID
@@ -932,6 +942,8 @@ alerts:
     chatid: 123456789
     message_thread_id: 100
     send_clip:
+    send_clip_after_snapshot:
+    clip_max_size: 50
     token: 987654321:ABCDEFGHIJKLMNOP
     template:
 ```
