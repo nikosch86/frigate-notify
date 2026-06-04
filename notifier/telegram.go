@@ -199,6 +199,13 @@ func sendTelegramSnapshotThenClip(bot *tgbotapi.BotAPI, profile models.Telegram,
 		Msg("Alert sent")
 	status.NotifSuccess()
 
+	// Cache the message ID so a later GenAI update can edit this message.
+	// editMessageMedia preserves the message ID, so this stays valid even after
+	// the snapshot is upgraded to video below.
+	if event.Extra.ReviewID != "" && NotifCacheSet != nil {
+		NotifCacheSet(event.Extra.ReviewID, fmt.Sprintf("telegram:%d", provider.index), strconv.Itoa(sent.MessageID))
+	}
+
 	// Nothing to upgrade to if there is no clip for this event
 	if !event.HasClip {
 		return

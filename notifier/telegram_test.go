@@ -194,3 +194,42 @@ func TestSendTelegramSnapshotThenClipOversized(t *testing.T) {
 		t.Errorf("expected snapshot to still be sent (sent=1), got sent=%d", status.Sent)
 	}
 }
+
+// TestSendTelegramSnapshotThenClipCachesMessageID verifies the snapshot message
+// ID is cached so a later GenAI update can edit it (editMessageMedia preserves
+// the message ID, so the cached value remains valid after the video upgrade).
+func TestSendTelegramSnapshotThenClipCachesMessageID(t *testing.T) {
+	tg, _, _ := newMockTelegram(t)
+	defer tg.Close()
+
+	bot, err := tgbotapi.NewBotAPIWithAPIEndpoint("token", tg.URL+"/bot%s/%s")
+	if err != nil {
+		t.Fatalf("failed to create mock bot: %v", err)
+	}
+
+	// Capture cache writes
+	type cacheEntry struct{ reviewID, provider, msgID string }
+	var got *cacheEntry
+	origSet := NotifCacheSet
+	defer func() { NotifCacheSet = origSet }()
+	NotifCacheSet = func(reviewID, provider, msgID string) {
+		got = &cacheEntry{reviewID, provider, msgID}
+	}
+
+	profile := models.Telegram{ChatID: 1}
+	status := &models.NotifierStatus{}
+	// No clip, so the flow returns right after caching the snapshot message
+	event := models.Event{ID: "evt-cache", HasSnapshot: true, HasClip: false}
+	event.Extra.ReviewID = "review-1"
+	snapshot := bytes.NewReader([]byte("FAKE-SNAPSHOT"))
+	provider := notifMeta{name: "telegram", index: 0}
+
+	sendTelegramSnapshotThenClip(bot, profile, status, event, snapshot, "caption", provider)
+
+	if got == nil {
+		t.Fatal("expected snapshot message ID to be cached for GenAI updates, but cache was not set")
+	}
+	if got.reviewID != "review-1" || got.provider != "telegram:0" || got.msgID != "555" {
+		t.Errorf("unexpected cache entry: reviewID=%q provider=%q msgID=%q", got.reviewID, got.provider, got.msgID)
+	}
+}
