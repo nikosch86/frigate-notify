@@ -2,9 +2,9 @@ package notifier
 
 import (
 	"bytes"
-	"embed"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/url"
 	"os"
 	"slices"
@@ -21,7 +21,10 @@ import (
 	"github.com/0x2142/frigate-notify/util"
 )
 
-var TemplateFiles embed.FS
+// TemplateFiles holds the notification templates. main.go assigns the embedded
+// templates here; it is an fs.FS interface (which embed.FS satisfies) so tests
+// can supply an on-disk template directory instead.
+var TemplateFiles fs.FS
 
 // NotifCacheSet and NotifCacheGet are set by the events package to avoid circular imports.
 // They provide access to the notification message ID cache.

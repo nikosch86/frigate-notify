@@ -18,6 +18,10 @@ import (
 // is used when a profile does not configure clip_max_size.
 const telegramDefaultClipMaxSizeMB = 50
 
+// newTelegramBot constructs the Telegram bot client. It is a package-level seam
+// so tests can point the bot at a mock Bot API server instead of api.telegram.org.
+var newTelegramBot = tgbotapi.NewBotAPI
+
 // telegramClipMaxBytes returns the configured clip size limit in bytes, falling
 // back to the default when the profile leaves clip_max_size unset (<= 0).
 func telegramClipMaxBytes(profile models.Telegram) int64 {
@@ -42,7 +46,7 @@ func SendTelegramMessage(event models.Event, snapshot io.Reader, provider notifM
 		message = strings.ReplaceAll(message, "<br />", "")
 	}
 
-	bot, err := tgbotapi.NewBotAPI(profile.Token)
+	bot, err := newTelegramBot(profile.Token)
 	if err != nil {
 		log.Warn().
 			Str("event_id", event.ID).
