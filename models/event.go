@@ -67,13 +67,14 @@ type ExtraFields struct {
 	CameraName          string
 	Audio               string
 	// GenAI fields
-	GenAITitle       string
-	GenAISummary     string
-	GenAIScene       string
-	GenAIThreatLevel string
-	GenAIConcerns    string
-	GenAIConfidence  string
-	Description      string
+	GenAITitle        string
+	GenAISummary      string
+	GenAIScene        string
+	GenAIThreatLevel  string
+	GenAIConcerns     string
+	GenAIConfidence   string
+	GenAIObservations []string
+	Description       string
 	// Used internally for GenAI update flow
 	ReviewID      string
 	IsGenAIUpdate bool

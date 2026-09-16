@@ -109,13 +109,17 @@ The list below doesn't contain every possible variable, just a few of the most c
 | .Extra.GenAITitle          | GenAI-generated title for the event (e.g. "Person approaching front door") |
 | .Extra.GenAISummary        | GenAI-generated short summary of the event |
 | .Extra.GenAIScene          | GenAI-generated detailed scene narrative |
-| .Extra.GenAIThreatLevel    | GenAI threat assessment: "Normal", "Minor", "Moderate", or "High" |
+| .Extra.GenAIThreatLevel    | GenAI threat assessment: "Normal", "Suspicious", or "Critical" (Frigate's `potential_threat_level` 0, 1, 2) |
 | .Extra.GenAIConcerns       | GenAI-identified concerns, comma-separated |
 | .Extra.GenAIConfidence     | GenAI confidence as percentage (e.g. "85%") |
+| .Extra.GenAIObservations   | GenAI chronological observations as a list of sentences (Frigate 0.18+). Iterate with `{{ range .Extra.GenAIObservations }}- {{ . }}\n{{ end }}` |
 | .Extra.Description         | GenAI-generated object description |
 
 !!! note
     GenAI variables are only populated when Frigate has [GenAI](https://docs.frigate.video/configuration/genai/) configured and the event has GenAI metadata available. When no GenAI data is present, these variables will be empty strings. Use conditional template logic (e.g. `{{ if ge (len .Extra.GenAITitle) 1 }}...{{ end }}`) to handle this gracefully.
+
+!!! note
+    The default Telegram notification appends `.Extra.GenAIObservations` as a bulleted timeline when the GenAI update edits the already-sent message. Custom templates are rendered as-is, so include the variable yourself if you want the timeline.
 
 ## Environment variables
 

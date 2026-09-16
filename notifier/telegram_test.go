@@ -233,3 +233,49 @@ func TestSendTelegramSnapshotThenClipCachesMessageID(t *testing.T) {
 		t.Errorf("unexpected cache entry: reviewID=%q provider=%q msgID=%q", got.reviewID, got.provider, got.msgID)
 	}
 }
+
+// TestAppendTelegramObservations covers the GenAI timeline added to edited
+// Telegram messages: bullets are HTML-escaped, placed ahead of the Links line
+// when present, and only as many as fit within the caption limit are added.
+func TestAppendTelegramObservations(t *testing.T) {
+	t.Run("no observations leaves message untouched", func(t *testing.T) {
+		if got := appendTelegramObservations("<b>Title</b>\n", nil, 1024); got != "<b>Title</b>\n" {
+			t.Errorf("unexpected change: %q", got)
+		}
+	})
+
+	t.Run("bullets appended and escaped when there is no links line", func(t *testing.T) {
+		got := appendTelegramObservations("<b>Title</b>\n\n", []string{"A van arrives.", " Person <unknown> leaves. "}, 1024)
+		want := "<b>Title</b>\n\n• A van arrives.\n• Person &lt;unknown&gt; leaves."
+		if got != want {
+			t.Errorf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("bullets inserted ahead of the links line", func(t *testing.T) {
+		msg := "<b>Title</b>\nSummary\nThreat Level: Normal\n\n\nLinks: <a href=\"x\">Camera</a>\n"
+		got := appendTelegramObservations(msg, []string{"A van arrives."}, 1024)
+		want := "<b>Title</b>\nSummary\nThreat Level: Normal\n\n• A van arrives.\n\nLinks: <a href=\"x\">Camera</a>\n"
+		if got != want {
+			t.Errorf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("stops before exceeding the limit", func(t *testing.T) {
+		long := strings.Repeat("x", 100)
+		got := appendTelegramObservations("msg", []string{long, long, long}, 220)
+		// "msg" (3) + separator (2) + 2 bullets of 103 each incl. newline = 211; a third would exceed 220
+		if n := strings.Count(got, "•"); n != 2 {
+			t.Errorf("expected 2 bullets within limit, got %d: %q", n, got)
+		}
+		if l := len([]rune(got)); l > 220 {
+			t.Errorf("result exceeds limit: %d runes", l)
+		}
+	})
+
+	t.Run("nothing added when even one bullet would exceed the limit", func(t *testing.T) {
+		if got := appendTelegramObservations("msg", []string{strings.Repeat("x", 50)}, 20); got != "msg" {
+			t.Errorf("expected message untouched, got %q", got)
+		}
+	})
+}

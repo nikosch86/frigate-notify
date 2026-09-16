@@ -3,9 +3,11 @@ package notifier
 import (
 	"bytes"
 	"fmt"
+	"html"
 	"io"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/rs/zerolog/log"
 
@@ -17,6 +19,10 @@ import (
 // telegramDefaultClipMaxSizeMB matches Telegram's cloud Bot API upload limit and
 // is used when a profile does not configure clip_max_size.
 const telegramDefaultClipMaxSizeMB = 50
+
+// telegramCaptionMaxChars is the Bot API limit for media captions
+// ("0-1024 characters after entities parsing").
+const telegramCaptionMaxChars = 1024
 
 // newTelegramBot constructs the Telegram bot client. It is a package-level seam
 // so tests can point the bot at a mock Bot API server instead of api.telegram.org.
@@ -32,6 +38,42 @@ func telegramClipMaxBytes(profile models.Telegram) int64 {
 	return int64(max) * 1024 * 1024
 }
 
+// appendTelegramObservations appends GenAI observations as HTML-escaped bullet
+// lines, ahead of a trailing "Links:" line when present, adding only as many as
+// keep the message within limit characters (counted including HTML tags).
+func appendTelegramObservations(message string, observations []string, limit int) string {
+	if len(observations) == 0 {
+		return message
+	}
+
+	const separator = "\n\n"
+	budget := limit - utf8.RuneCountInString(message) - utf8.RuneCountInString(separator)
+	var lines []string
+	for _, observation := range observations {
+		observation = strings.TrimSpace(observation)
+		if observation == "" {
+			continue
+		}
+		line := "• " + html.EscapeString(observation)
+		cost := utf8.RuneCountInString(line) + 1 // newline between bullets
+		if cost > budget {
+			break
+		}
+		budget -= cost
+		lines = append(lines, line)
+	}
+	if len(lines) == 0 {
+		return message
+	}
+	block := strings.Join(lines, "\n")
+
+	if i := strings.LastIndex(message, "\nLinks: "); i >= 0 {
+		head := strings.TrimRight(message[:i], "\n")
+		return head + separator + block + separator + message[i+1:]
+	}
+	return strings.TrimRight(message, "\n") + separator + block
+}
+
 // SendTelegramMessage sends alert through Telegram to individual users
 func SendTelegramMessage(event models.Event, snapshot io.Reader, provider notifMeta) {
 	profile := config.ConfigData.Alerts.Telegram[provider.index]
@@ -44,6 +86,11 @@ func SendTelegramMessage(event models.Event, snapshot io.Reader, provider notifM
 	} else {
 		message = renderMessage("html", event, "message", "Telegram")
 		message = strings.ReplaceAll(message, "<br />", "")
+		// GenAI updates edit the already-delivered message, so there is room to
+		// append Frigate's chronological observations as a short timeline.
+		if event.Extra.IsGenAIUpdate {
+			message = appendTelegramObservations(message, event.Extra.GenAIObservations, telegramCaptionMaxChars)
+		}
 	}
 
 	bot, err := newTelegramBot(profile.Token)

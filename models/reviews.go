@@ -29,11 +29,12 @@ type Review struct {
 
 // ReviewMetadata contains GenAI-generated review data from Frigate
 type ReviewMetadata struct {
-	Title               string   `json:"title"`
-	Scene               string   `json:"scene"`
-	ShortSummary        string   `json:"shortSummary"`
-	Confidence          float64  `json:"confidence"`
-	PotentialThreatLevel int     `json:"potential_threat_level"`
-	OtherConcerns       []string `json:"other_concerns"`
-	Time                string   `json:"time"`
+	Title                string   `json:"title"`
+	Scene                string   `json:"scene"`
+	ShortSummary         string   `json:"shortSummary"`
+	Confidence           float64  `json:"confidence"`
+	PotentialThreatLevel int      `json:"potential_threat_level"`
+	OtherConcerns        []string `json:"other_concerns"`
+	Observations         []string `json:"observations"`
+	Time                 string   `json:"time"`
 }

@@ -128,34 +128,10 @@ func processReview(review models.Review) {
 
 	// Populate GenAI fields from review metadata if available and enabled
 	if config.ConfigData.Alerts.General.GenAI.Enabled && review.Data.Metadata != nil {
-		meta := review.Data.Metadata
-		detections[0].Extra.GenAITitle = meta.Title
-		detections[0].Extra.GenAISummary = meta.ShortSummary
-		detections[0].Extra.GenAIScene = meta.Scene
-
-		// Convert threat level int to human-readable string
-		switch meta.PotentialThreatLevel {
-		case 0:
-			detections[0].Extra.GenAIThreatLevel = "Normal"
-		case 1:
-			detections[0].Extra.GenAIThreatLevel = "Minor"
-		case 2:
-			detections[0].Extra.GenAIThreatLevel = "Moderate"
-		case 3:
-			detections[0].Extra.GenAIThreatLevel = "High"
-		}
-
-		if len(meta.OtherConcerns) > 0 {
-			detections[0].Extra.GenAIConcerns = strings.Join(meta.OtherConcerns, ", ")
-		}
-
-		if meta.Confidence > 0 {
-			detections[0].Extra.GenAIConfidence = fmt.Sprintf("%v%%", int(meta.Confidence*100))
-		}
-
+		applyGenAIMetadata(&detections[0], review.Data.Metadata)
 		log.Debug().
 			Str("review_id", review.ID).
-			Str("genai_title", meta.Title).
+			Str("genai_title", review.Data.Metadata.Title).
 			Str("genai_threat_level", detections[0].Extra.GenAIThreatLevel).
 			Msg("GenAI metadata applied to notification")
 	}
@@ -241,28 +217,7 @@ func processGenAIReviewUpdate(review models.Review) {
 
 	// Populate GenAI fields from review metadata
 	meta := review.Data.Metadata
-	detections[0].Extra.GenAITitle = meta.Title
-	detections[0].Extra.GenAISummary = meta.ShortSummary
-	detections[0].Extra.GenAIScene = meta.Scene
-
-	switch meta.PotentialThreatLevel {
-	case 0:
-		detections[0].Extra.GenAIThreatLevel = "Normal"
-	case 1:
-		detections[0].Extra.GenAIThreatLevel = "Minor"
-	case 2:
-		detections[0].Extra.GenAIThreatLevel = "Moderate"
-	case 3:
-		detections[0].Extra.GenAIThreatLevel = "High"
-	}
-
-	if len(meta.OtherConcerns) > 0 {
-		detections[0].Extra.GenAIConcerns = strings.Join(meta.OtherConcerns, ", ")
-	}
-
-	if meta.Confidence > 0 {
-		detections[0].Extra.GenAIConfidence = fmt.Sprintf("%v%%", int(meta.Confidence*100))
-	}
+	applyGenAIMetadata(&detections[0], meta)
 
 	// Mark as GenAI update so providers can edit existing messages
 	detections[0].Extra.ReviewID = review.ID
@@ -276,6 +231,38 @@ func processGenAIReviewUpdate(review models.Review) {
 
 	// Send notification directly, bypassing zone cache and filters
 	notifier.SendAlert(detections)
+}
+
+// threatLevelLabel converts Frigate's potential_threat_level into a human-readable
+// string. Frigate 0.18 defines the scale as 0 = normal, 1 = suspicious,
+// 2 = critical threat; anything above 2 is treated as critical.
+func threatLevelLabel(level int) string {
+	switch {
+	case level <= 0:
+		return "Normal"
+	case level == 1:
+		return "Suspicious"
+	default:
+		return "Critical"
+	}
+}
+
+// applyGenAIMetadata copies GenAI review metadata from Frigate into the
+// template-facing Extra fields of an event.
+func applyGenAIMetadata(event *models.Event, meta *models.ReviewMetadata) {
+	event.Extra.GenAITitle = meta.Title
+	event.Extra.GenAISummary = meta.ShortSummary
+	event.Extra.GenAIScene = meta.Scene
+	event.Extra.GenAIThreatLevel = threatLevelLabel(meta.PotentialThreatLevel)
+	event.Extra.GenAIObservations = meta.Observations
+
+	if len(meta.OtherConcerns) > 0 {
+		event.Extra.GenAIConcerns = strings.Join(meta.OtherConcerns, ", ")
+	}
+
+	if meta.Confidence > 0 {
+		event.Extra.GenAIConfidence = fmt.Sprintf("%v%%", int(meta.Confidence*100))
+	}
 }
 
 func recheckReview(review models.Review) models.Review {

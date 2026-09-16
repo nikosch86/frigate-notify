@@ -25,6 +25,17 @@ type summaryResponse struct {
 	Success bool   `json:"success"`
 	Summary string `json:"summary"`
 	Message string `json:"message"`
+	// FastAPI auth/permission errors (e.g. 403 without full camera access) use
+	// "detail" instead of "message".
+	Detail string `json:"detail"`
+}
+
+// reason returns whichever explanatory field Frigate populated.
+func (r summaryResponse) reason() string {
+	if r.Message != "" {
+		return r.Message
+	}
+	return r.Detail
 }
 
 // ResetSummaryTimer is called after each notification is sent.
@@ -98,17 +109,24 @@ func requestFrigateSummary(start, end time.Time) (string, error) {
 		Msg("Requesting GenAI summary from Frigate")
 
 	response, err := util.HTTPPost(url, config.ConfigData.Frigate.Insecure, nil, "", config.ConfigData.Frigate.Headers...)
+
+	// Frigate answers non-2xx with a JSON body explaining why (no GenAI provider
+	// with the descriptions role, the user lacks access to all cameras, ...).
+	// That message is included in the returned error.
+	var result summaryResponse
+	parseErr := json.Unmarshal(response, &result)
 	if err != nil {
+		if parseErr == nil && result.reason() != "" {
+			return "", fmt.Errorf("summary API request failed: %w: %s", err, result.reason())
+		}
 		return "", fmt.Errorf("summary API request failed: %w", err)
 	}
-
-	var result summaryResponse
-	if err := json.Unmarshal(response, &result); err != nil {
-		return "", fmt.Errorf("failed to parse summary response: %w", err)
+	if parseErr != nil {
+		return "", fmt.Errorf("failed to parse summary response: %w", parseErr)
 	}
 
 	if !result.Success {
-		return "", fmt.Errorf("Frigate summary API error: %s", result.Message)
+		return "", fmt.Errorf("Frigate summary API error: %s", result.reason())
 	}
 
 	log.Debug().

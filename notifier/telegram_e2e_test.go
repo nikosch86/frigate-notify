@@ -114,6 +114,7 @@ func TestTelegramGenAISummaryAfterSnapshotThenClipE2E(t *testing.T) {
 	update.Extra.GenAITitle = genaiTitle
 	update.Extra.GenAISummary = genaiDetail
 	update.Extra.GenAIThreatLevel = "Normal"
+	update.Extra.GenAIObservations = []string{"A courier walks up to the porch.", "The courier leaves a parcel and walks away."}
 	SendTelegramMessage(update, bytes.NewReader(nil), provider)
 
 	// --- Assert the full request sequence ---
@@ -175,11 +176,19 @@ func TestTelegramGenAISummaryAfterSnapshotThenClipE2E(t *testing.T) {
 		t.Errorf("editMessageCaption should target chat_id 1, got %q", got)
 	}
 	caption := captionParams.Get("caption")
+	t.Logf("edited caption:\n%s", caption)
 	if !strings.Contains(caption, genaiTitle) {
 		t.Errorf("edited caption should contain the GenAI title %q, got: %q", genaiTitle, caption)
 	}
 	if !strings.Contains(caption, genaiDetail) {
 		t.Errorf("edited caption should contain the GenAI summary %q, got: %q", genaiDetail, caption)
+	}
+	timeline := "• A courier walks up to the porch.\n• The courier leaves a parcel and walks away."
+	if !strings.Contains(caption, timeline) {
+		t.Errorf("edited caption should contain the observations timeline, got: %q", caption)
+	}
+	if strings.Index(caption, timeline) > strings.Index(caption, "Links:") {
+		t.Errorf("observations timeline should be placed before the links line, got: %q", caption)
 	}
 
 	// Both sends are reported as successful (1 snapshot + 1 GenAI edit).

@@ -35,12 +35,13 @@ type WebhookPayload struct {
 }
 
 type WebhookGenAI struct {
-	Title       string `json:"title,omitempty"`
-	Summary     string `json:"summary,omitempty"`
-	Description string `json:"description,omitempty"`
-	ThreatLevel string `json:"threat_level,omitempty"`
-	Confidence  string `json:"confidence,omitempty"`
-	Concerns    string `json:"concerns,omitempty"`
+	Title        string   `json:"title,omitempty"`
+	Summary      string   `json:"summary,omitempty"`
+	Description  string   `json:"description,omitempty"`
+	ThreatLevel  string   `json:"threat_level,omitempty"`
+	Confidence   string   `json:"confidence,omitempty"`
+	Concerns     string   `json:"concerns,omitempty"`
+	Observations []string `json:"observations,omitempty"`
 }
 
 // SendWebhook sends alert through HTTP POST to target webhook
@@ -95,12 +96,13 @@ func SendWebhook(event models.Event, provider notifMeta) {
 		// Include GenAI data if any fields are populated
 		if event.Extra.GenAITitle != "" || event.Extra.GenAISummary != "" || event.Extra.Description != "" {
 			defaultTemplate.GenAI = &WebhookGenAI{
-				Title:       event.Extra.GenAITitle,
-				Summary:     event.Extra.GenAISummary,
-				Description: event.Extra.Description,
-				ThreatLevel: event.Extra.GenAIThreatLevel,
-				Confidence:  event.Extra.GenAIConfidence,
-				Concerns:    event.Extra.GenAIConcerns,
+				Title:        event.Extra.GenAITitle,
+				Summary:      event.Extra.GenAISummary,
+				Description:  event.Extra.Description,
+				ThreatLevel:  event.Extra.GenAIThreatLevel,
+				Confidence:   event.Extra.GenAIConfidence,
+				Concerns:     event.Extra.GenAIConcerns,
+				Observations: event.Extra.GenAIObservations,
 			}
 		}
 		payload, _ = json.Marshal(defaultTemplate)

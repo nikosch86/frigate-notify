@@ -193,15 +193,15 @@ All alert providers (Discord, Gotify, etc) also support optional filters & the a
 - **snap_bbox** (Optional - Default: `false`)
     - Env: `FN_ALERTS__GENERAL__SNAP_BBOX`
     - Includes object bounding box on snapshot when retrieved from Frigate
-    - Note: Per [Frigate docs](https://docs.frigate.video/integrations/api/#get-apieventsidsnapshotjpg), only applied when event is in progress
+    - Note: On Frigate 0.17 and older this is only applied while the event is in progress. Frigate 0.18+ renders the snapshot on request, so it applies to completed events as well; when left `false`, Frigate falls back to the camera's own `snapshots` config
 - **snap_timestamp** (Optional - Default: `false`)
     - Env: `FN_ALERTS__GENERAL__SNAP_TIMESTAMP`
     - Includes timestamp on snapshot when retrieved from Frigate
-    - Note: Per [Frigate docs](https://docs.frigate.video/integrations/api/#get-apieventsidsnapshotjpg), only applied when event is in progress
+    - Note: Same Frigate version behaviour as `snap_bbox`
 - **snap_crop** (Optional - Default: `false`)
     - Env: `FN_ALERTS__GENERAL__SNAP_CROP`
     - Crops snapshot when retrieved from Frigate
-    - Note: Per [Frigate docs](https://docs.frigate.video/integrations/api/#get-apieventsidsnapshotjpg), only applied when event is in progress
+    - Note: Same Frigate version behaviour as `snap_bbox`
 - **snap_hires** (Optional - Default: `false`)
     - Env: `FN_ALERTS__GENERAL__SNAP_HIRES`
     - By default, snapshots are collected from Frigate detect stream which may be lower resolution
@@ -254,7 +254,8 @@ All alert providers (Discord, Gotify, etc) also support optional filters & the a
         - Env: `FN_ALERTS__GENERAL__GENAI__SUMMARY_IDLE_TIME`
         - After a burst of activity, when no new notifications have been sent for this many seconds, request a GenAI activity summary from Frigate
         - The summary covers all events across all cameras during the activity period
-        - Requires Frigate to have a GenAI provider configured
+        - Requires Frigate to have a GenAI provider configured (on Frigate 0.18+, a provider with the `descriptions` role)
+        - On Frigate 0.18+ the summary endpoint requires access to every camera, so the Frigate user configured under `frigate` must be an admin, a viewer, or a custom role covering all cameras
         - Set to `0` to disable activity summaries
 
 ```yaml title="Config File Snippet"
@@ -975,7 +976,8 @@ alerts:
          "description": "",
          "threat_level": "",
          "confidence": "",
-         "concerns": ""
+         "concerns": "",
+         "observations": []
     }
 }
 ```
