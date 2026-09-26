@@ -5,6 +5,7 @@
  - Frigate 0.18 support: threat level now renders as "Normal", "Suspicious" or "Critical" to match Frigate's 0-2 scale (was "Minor"/"Moderate"/"High")
  - Add `.Extra.GenAIObservations` template variable (Frigate 0.18+) and append it as a timeline to Telegram GenAI updates; also included in the default webhook payload
  - Include Frigate's error message when a GenAI activity summary request is rejected
+ - Fix GenAI update notifications being sent for reviews whose initial alert was dropped (e.g. detection-only reviews with `notify_detections` off, or filtered zones/labels/cameras)
 
 ## [v0.5.4](https://github.com/0x2142/frigate-notify/releases/tag/v0.5.4) - Jan 13 2026
  - Add option to use UUID as message ID for SMTP alerts

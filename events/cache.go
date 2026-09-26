@@ -67,6 +67,16 @@ func GetNotifMessageID(reviewID, provider string) string {
 	return messageID
 }
 
+// setReviewNotified records that an alert was dispatched for a review
+func setReviewNotified(reviewID string) {
+	notifCache.Set(reviewID+":notified", "")
+}
+
+// reviewNotified reports whether an alert was dispatched for a review
+func reviewNotified(reviewID string) bool {
+	return notifCache.Has(reviewID + ":notified")
+}
+
 // Add zone to list of zones that have already generated notifications for specified event ID
 func setZoneAlerted(event models.Event) {
 	// Get current list of zones by event ID, if it exists

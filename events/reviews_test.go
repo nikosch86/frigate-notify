@@ -105,7 +105,9 @@ func newGenAIUpdateFixture(t *testing.T, frigateStatus int, detectionJSON string
 
 	origConfig := config.ConfigData
 	origInternal := config.Internal
+	InitZoneCache()
 	t.Cleanup(func() {
+		CloseZoneCache()
 		config.ConfigData = origConfig
 		config.Internal = origInternal
 	})
@@ -145,6 +147,7 @@ func newGenAIUpdateFixture(t *testing.T, frigateStatus int, detectionJSON string
 	}
 	config.ConfigData.Alerts.Webhook = []models.Webhook{profile}
 	config.Internal.Status.Notifications.Webhook = make([]models.NotifierStatus, 1)
+	config.Internal.Status.Notifications.Enabled = true
 
 	// Sentinel: SendAlert stamps LastNotification synchronously, so a zero
 	// value after the call proves no alert was dispatched.
@@ -172,7 +175,7 @@ func genaiReview(id string, detections []string, meta *models.ReviewMetadata) mo
 	return review
 }
 
-const genaiDetectionJSON = `{"id":"det-1","camera":"front_door","label":"person","zones":["porch"],"data":{"top_score":0.9}}`
+const genaiDetectionJSON = `{"id":"det-1","camera":"front_door","label":"person","zones":["porch"],"has_clip":true,"data":{"top_score":0.9}}`
 
 // TestProcessGenAIReviewUpdateDropped covers every early return: the update
 // must neither query Frigate (unless it reaches the fetch step) nor dispatch
@@ -205,6 +208,12 @@ func TestProcessGenAIReviewUpdateDropped(t *testing.T) {
 			review:        genaiReview("rev-1", []string{"det-1"}, nil),
 		},
 		{
+			name:          "review was not notified",
+			frigateStatus: http.StatusOK,
+			configure:     func() {},
+			review:        genaiReview("rev-unnotified", []string{"det-1"}, meta),
+		},
+		{
 			name:          "no detections",
 			frigateStatus: http.StatusOK,
 			configure:     func() {},
@@ -222,6 +231,7 @@ func TestProcessGenAIReviewUpdateDropped(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newGenAIUpdateFixture(t, tc.frigateStatus, genaiDetectionJSON)
+			setReviewNotified("rev-1")
 			tc.configure()
 
 			processGenAIReviewUpdate(tc.review)
@@ -257,6 +267,7 @@ func TestProcessGenAIReviewUpdateSendsEnrichedAlert(t *testing.T) {
 				PotentialThreatLevel: tc.threatLevel,
 				Observations:         []string{"A van arrives.", "A parcel is left."},
 			}
+			setReviewNotified("rev-1")
 
 			processGenAIReviewUpdate(genaiReview("rev-1", []string{"det-1"}, meta))
 
@@ -282,6 +293,58 @@ func TestProcessGenAIReviewUpdateSendsEnrichedAlert(t *testing.T) {
 				if got[key] != wantValue {
 					t.Errorf("%s = %q, want %q", key, got[key], wantValue)
 				}
+			}
+		})
+	}
+}
+
+// TestGenAIUpdateFollowsInitialReview checks that a GenAI update is only sent
+// for a review whose initial notification went out, so it cannot bypass
+// notify_detections or the event filters applied by processReview.
+func TestGenAIUpdateFollowsInitialReview(t *testing.T) {
+	meta := &models.ReviewMetadata{Title: "Person walks across the patio"}
+	tests := []struct {
+		name       string
+		severity   string
+		wantNotify bool
+	}{
+		{"detection with notify_detections off", "detection", false},
+		{"alert", "alert", true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newGenAIUpdateFixture(t, http.StatusOK, genaiDetectionJSON)
+			review := genaiReview("rev-1", []string{"det-1"}, nil)
+			review.Severity = tc.severity
+
+			// Disable the webhook for the initial review so its delivery cannot
+			// overlap the GenAI update's; LastNotification still records
+			// whether processReview dispatched an alert.
+			config.ConfigData.Alerts.Webhook[0].Enabled = false
+			processReview(review)
+			if got := !config.Internal.Status.LastNotification.IsZero(); got != tc.wantNotify {
+				t.Fatalf("initial review dispatched = %v, want %v", got, tc.wantNotify)
+			}
+
+			config.ConfigData.Alerts.Webhook[0].Enabled = true
+			f.frigateHits = nil
+			config.Internal.Status.LastNotification = time.Time{}
+			review.Data.Metadata = meta
+			processGenAIReviewUpdate(review)
+
+			if !tc.wantNotify {
+				if len(f.frigateHits) != 0 {
+					t.Errorf("Frigate API requests = %v, want none", f.frigateHits)
+				}
+				if !config.Internal.Status.LastNotification.IsZero() {
+					t.Error("expected no GenAI update to be dispatched")
+				}
+				return
+			}
+			got := f.waitForWebhook(t)
+			if got["genai_update"] != "true" || got["title"] != meta.Title {
+				t.Errorf("GenAI update = %v, want genai_update=true title=%q", got, meta.Title)
 			}
 		})
 	}

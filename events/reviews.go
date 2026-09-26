@@ -137,6 +137,7 @@ func processReview(review models.Review) {
 	}
 
 	// Send alert with snapshot
+	setReviewNotified(review.ID)
 	notifier.SendAlert(detections)
 }
 
@@ -166,6 +167,14 @@ func processGenAIReviewUpdate(review models.Review) {
 		return
 	}
 
+	// Only follow up on reviews that processReview sent an alert for
+	if !reviewNotified(review.ID) {
+		log.Debug().
+			Str("review_id", review.ID).
+			Msg("GenAI update ignored - review was not notified")
+		return
+	}
+
 	log.Debug().
 		Str("review_id", review.ID).
 		Str("genai_title", review.Data.Metadata.Title).
@@ -181,7 +190,7 @@ func processGenAIReviewUpdate(review models.Review) {
 		return
 	}
 
-	// Retrieve detection details from Frigate API (bypass all filters/zone cache)
+	// Retrieve detection details from Frigate API (bypass zone cache)
 	var detections []models.Event
 	for _, id := range review.Data.Detections {
 		url := fmt.Sprintf("%s/api/events/%s", config.ConfigData.Frigate.Server, id)
@@ -229,7 +238,7 @@ func processGenAIReviewUpdate(review models.Review) {
 		Str("genai_threat_level", detections[0].Extra.GenAIThreatLevel).
 		Msg("Sending GenAI-enriched notification")
 
-	// Send notification directly, bypassing zone cache and filters
+	// Send notification directly, bypassing zone cache
 	notifier.SendAlert(detections)
 }
 
