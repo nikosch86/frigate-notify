@@ -81,6 +81,16 @@ func onSummaryIdle() {
 		Time("end", endTime).
 		Msg("Activity idle - requesting GenAI summary from Frigate")
 
+	concerns, err := activityHasConcerns(startTime, endTime)
+	if err != nil {
+		log.Warn().
+			Err(err).
+			Msg("Could not check reviews for concerns, requesting GenAI summary anyway")
+	} else if !concerns {
+		log.Debug().Msg("No review with GenAI concerns during activity, skipping summary")
+		return
+	}
+
 	summary, err := requestFrigateSummary(startTime, endTime)
 	if err != nil {
 		log.Warn().
@@ -95,6 +105,60 @@ func onSummaryIdle() {
 	}
 
 	sendSummaryNotification(summary, startTime)
+}
+
+// activityHasConcerns mirrors Frigate's summarize predicate: only review
+// segments whose GenAI metadata flags a threat or other concerns reach the
+// LLM; without any, Frigate returns a canned placeholder instead of a summary.
+func activityHasConcerns(start, end time.Time) (bool, error) {
+	// Without limit or reviewed params Frigate returns every segment in the
+	// window, like summarize considers them
+	url := fmt.Sprintf("%s/api/review?after=%d&before=%d",
+		config.ConfigData.Frigate.Server,
+		start.Unix(),
+		end.Unix(),
+	)
+
+	response, err := util.HTTPGet(url, config.ConfigData.Frigate.Insecure, "", config.ConfigData.Frigate.Headers...)
+	if err != nil {
+		return false, fmt.Errorf("review API request failed: %w", err)
+	}
+
+	// Frigate keeps GenAI output that fails validation, so metadata fields are
+	// not guaranteed to be well-typed
+	var reviews []struct {
+		Data struct {
+			Metadata *struct {
+				PotentialThreatLevel any `json:"potential_threat_level"`
+				OtherConcerns        any `json:"other_concerns"`
+			} `json:"metadata"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(response, &reviews); err != nil {
+		return false, fmt.Errorf("failed to parse review response: %w", err)
+	}
+
+	for _, review := range reviews {
+		meta := review.Data.Metadata
+		if meta == nil {
+			continue
+		}
+		if level, ok := meta.PotentialThreatLevel.(float64); ok && level > 0 {
+			return true, nil
+		}
+		// Frigate tests other_concerns for Python truthiness
+		switch concerns := meta.OtherConcerns.(type) {
+		case []any:
+			if len(concerns) > 0 {
+				return true, nil
+			}
+		case string:
+			if concerns != "" {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 func requestFrigateSummary(start, end time.Time) (string, error) {

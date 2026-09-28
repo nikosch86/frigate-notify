@@ -255,6 +255,7 @@ All alert providers (Discord, Gotify, etc) also support optional filters & the a
         - Env: `FN_ALERTS__GENERAL__GENAI__SUMMARY_IDLE_TIME`
         - After a burst of activity, when no new notifications have been sent for this many seconds, request a GenAI activity summary from Frigate
         - The summary covers all events across all cameras during the activity period
+        - A summary is only sent when at least one review in that period was flagged by GenAI with a threat level above normal or other concerns; routine activity produces no summary
         - Requires Frigate to have a GenAI provider configured (on Frigate 0.18+, a provider with the `descriptions` role)
         - On Frigate 0.18+ the summary endpoint requires access to every camera, so the Frigate user configured under `frigate` must be an admin, a viewer, or a custom role covering all cameras
         - Set to `0` to disable activity summaries
