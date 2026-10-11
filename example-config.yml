@@ -342,6 +342,18 @@ alerts:
     # Max clip size (MB) to upload when replacing the snapshot. Telegram's cloud Bot
     # API caps uploads at 50 MB; a self-hosted local Bot API server allows up to 2000.
     clip_max_size:
+    # Set to `true` to re-encode the clip with ffmpeg to a smaller H.264/AAC video
+    # before uploading it. `clip_max_size` then applies to the transcoded clip.
+    clip_transcode:
+    # Max height (pixels) of the transcoded clip. Default 720.
+    clip_transcode_height:
+    # Max video bitrate (kbit/s) of the transcoded clip. Default 1000.
+    clip_transcode_bitrate:
+    # Max time (seconds) to wait for ffmpeg. Default 120.
+    clip_transcode_timeout:
+    # VAAPI render device (e.g. /dev/dri/renderD128) to transcode on a GPU instead
+    # of in software. Falls back to software if it fails.
+    clip_transcode_vaapi_device:
     # Message Thead ID
     message_thread_id:
     # Bot API token

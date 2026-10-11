@@ -930,6 +930,29 @@ Within the response, locate your message to the bot, then grab the ID under `mes
     - Env: `FN_ALERTS__TELEGRAM__CLIP_MAX_SIZE`
     - Maximum clip size, in MB, that will be uploaded when replacing the snapshot via `send_clip_after_snapshot`. Larger clips are skipped and the snapshot is kept
     - Telegram's cloud Bot API caps bot uploads at **50 MB**. If you run a [self-hosted Local Bot API server](https://core.telegram.org/bots/api#using-a-local-bot-api-server) you can raise this up to `2000`
+- **clip_transcode** (Optional - Default: `false`)
+    - Env: `FN_ALERTS__TELEGRAM__CLIP_TRANSCODE`
+    - Optionally re-encode the clip to a smaller H.264/AAC video before it is uploaded, so it is lighter to download. Applies to both `send_clip` and `send_clip_after_snapshot`
+    - Requires `ffmpeg`, which is included in the Docker image. If running the binary directly, `ffmpeg` must be installed
+    - When enabled, `clip_max_size` applies to the transcoded clip
+    - If the transcode fails or exceeds `clip_transcode_timeout`, the snapshot is sent or kept instead
+    - If the transcoded clip is not smaller than the original, the original is sent
+    - Only one clip is transcoded at a time. Each one logs its size before & after and the time taken
+- **clip_transcode_height** (Optional - Default: `720`)
+    - Env: `FN_ALERTS__TELEGRAM__CLIP_TRANSCODE_HEIGHT`
+    - Maximum height, in pixels, of the transcoded clip. Width follows the aspect ratio, and smaller clips are not upscaled
+- **clip_transcode_bitrate** (Optional - Default: `1000`)
+    - Env: `FN_ALERTS__TELEGRAM__CLIP_TRANSCODE_BITRATE`
+    - Maximum video bitrate, in kbit/s, of the transcoded clip. Audio adds 64 kbit/s
+    - The default produces roughly 1.3 MB for a 10 second clip, or 8 MB for a minute
+- **clip_transcode_timeout** (Optional - Default: `120`)
+    - Env: `FN_ALERTS__TELEGRAM__CLIP_TRANSCODE_TIMEOUT`
+    - Maximum time, in seconds, to wait for `ffmpeg` to transcode a clip
+- **clip_transcode_vaapi_device** (Optional)
+    - Env: `FN_ALERTS__TELEGRAM__CLIP_TRANSCODE_VAAPI_DEVICE`
+    - Optionally transcode on a GPU via VAAPI by specifying its render device, for example `/dev/dri/renderD128`. This is faster & uses far less CPU than the default software encoder, at somewhat lower quality for the same bitrate
+    - The device must be passed into the container. The Docker image includes the Intel VA driver (x86_64 only)
+    - If the GPU transcode fails for any reason, the clip is transcoded in software instead
 - **message_thread_id** (Optional)
     - Env: `FN_ALERTS__TELEGRAM__MESSAGE_THREAD_ID`
     - Optionally send notification to a message thread by ID
@@ -947,6 +970,11 @@ alerts:
     send_clip:
     send_clip_after_snapshot:
     clip_max_size: 50
+    clip_transcode:
+    clip_transcode_height: 720
+    clip_transcode_bitrate: 1000
+    clip_transcode_timeout: 120
+    clip_transcode_vaapi_device:
     token: 987654321:ABCDEFGHIJKLMNOP
     template:
 ```

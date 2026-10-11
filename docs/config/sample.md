@@ -173,6 +173,11 @@ alerts:
     send_clip:
     send_clip_after_snapshot:
     clip_max_size:
+    clip_transcode:
+    clip_transcode_height:
+    clip_transcode_bitrate:
+    clip_transcode_timeout:
+    clip_transcode_vaapi_device:
     message_thread_id:
     token:
     template:

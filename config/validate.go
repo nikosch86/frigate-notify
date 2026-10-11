@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"html/template"
+	"os/exec"
 	"slices"
 	"strings"
 	"time"
@@ -803,6 +804,12 @@ func (c *Config) validateTelegram(id int) []string {
 	// Check template syntax
 	if msg := validateTemplate("Telegram", c.Alerts.Telegram[id].Template); msg != "" {
 		telegramErrors = append(telegramErrors, msg+fmt.Sprintf(" Profile ID %v", id))
+	}
+	// Check ffmpeg is available if clips are to be transcoded
+	if c.Alerts.Telegram[id].ClipTranscode {
+		if _, err := exec.LookPath("ffmpeg"); err != nil {
+			telegramErrors = append(telegramErrors, fmt.Sprintf("Telegram clip_transcode requires ffmpeg, which was not found! Profile ID %v", id))
+		}
 	}
 	return telegramErrors
 }

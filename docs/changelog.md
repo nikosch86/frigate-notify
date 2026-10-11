@@ -2,6 +2,7 @@
 
 ## Unreleased
  - Add ability to send the snapshot first, then replace it in-place with the event video clip via [Telegram](https://frigate-notify.0x2142.com/latest/config/file/#telegram) (`send_clip_after_snapshot`), with a configurable `clip_max_size` upload limit
+ - Add option to re-encode [Telegram](https://frigate-notify.0x2142.com/latest/config/file/#telegram) clips to a smaller video with ffmpeg before upload (`clip_transcode`), optionally on a GPU via VAAPI. The Docker image is now based on Alpine & includes ffmpeg
  - Frigate 0.18 support: threat level now renders as "Normal", "Suspicious" or "Critical" to match Frigate's 0-2 scale (was "Minor"/"Moderate"/"High")
  - Add `.Extra.GenAIObservations` template variable (Frigate 0.18+) and append it as a timeline to Telegram GenAI updates; also included in the default webhook payload
  - Include Frigate's error message when a GenAI activity summary request is rejected

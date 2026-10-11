@@ -148,6 +148,9 @@ func SendTelegramMessage(event models.Event, snapshot io.Reader, provider notifM
 	var clip io.Reader
 	if event.HasClip && profile.SendClip {
 		clip = GetClip(event)
+		if clip != nil && profile.ClipTranscode {
+			clip = transcodeTelegramClip(clip, event, profile, provider)
+		}
 		if clip == nil {
 			event.HasClip = false
 		}
@@ -272,6 +275,11 @@ func sendTelegramSnapshotThenClip(bot *tgbotapi.BotAPI, profile models.Telegram,
 			Msg("Clip unavailable, keeping snapshot")
 		return
 	}
+	if profile.ClipTranscode {
+		if clip = transcodeTelegramClip(clip, event, profile, provider); clip == nil {
+			return
+		}
+	}
 	clipBytes, err := io.ReadAll(clip)
 	if err != nil || len(clipBytes) == 0 {
 		log.Warn().
@@ -344,5 +352,6 @@ func sendTelegramSnapshotThenClip(bot *tgbotapi.BotAPI, profile models.Telegram,
 		Str("event_id", event.ID).
 		Str("provider", "Telegram").
 		Int("provider_id", provider.index).
+		Int("clip_bytes", len(clipBytes)).
 		Msg("Snapshot replaced with clip")
 }

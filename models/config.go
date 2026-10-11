@@ -224,13 +224,18 @@ type SMTP struct {
 }
 
 type Telegram struct {
-	AlertCommon           `koanf:",squash"`
-	ChatID                int64  `koanf:"chatid" json:"chatid,omitempty" doc:"Telegram chat ID" default:"0"`
-	MessageThreadID       int    `koanf:"message_thread_id" json:"message_thread_id,omitempty" doc:"Send message to thread by ID" default:"0"`
-	Token                 string `koanf:"token" json:"token,omitempty" doc:"Telegram bot token" default:""`
-	SendClip              bool   `koanf:"send_clip" json:"send_clip,omitempty" doc:"Send event video clip instead of snapshot image" default:"false"`
-	SendClipAfterSnapshot bool   `koanf:"send_clip_after_snapshot" json:"send_clip_after_snapshot,omitempty" doc:"Send snapshot first, then replace it with the event video clip once available (within clip_max_size)" default:"false"`
-	ClipMaxSize           int    `koanf:"clip_max_size" json:"clip_max_size,omitempty" doc:"Maximum clip size (MB) to upload when replacing the snapshot. Telegram's cloud Bot API caps uploads at 50 MB; a self-hosted local Bot API server allows up to 2000 MB" default:"50"`
+	AlertCommon              `koanf:",squash"`
+	ChatID                   int64  `koanf:"chatid" json:"chatid,omitempty" doc:"Telegram chat ID" default:"0"`
+	MessageThreadID          int    `koanf:"message_thread_id" json:"message_thread_id,omitempty" doc:"Send message to thread by ID" default:"0"`
+	Token                    string `koanf:"token" json:"token,omitempty" doc:"Telegram bot token" default:""`
+	SendClip                 bool   `koanf:"send_clip" json:"send_clip,omitempty" doc:"Send event video clip instead of snapshot image" default:"false"`
+	SendClipAfterSnapshot    bool   `koanf:"send_clip_after_snapshot" json:"send_clip_after_snapshot,omitempty" doc:"Send snapshot first, then replace it with the event video clip once available (within clip_max_size)" default:"false"`
+	ClipMaxSize              int    `koanf:"clip_max_size" json:"clip_max_size,omitempty" doc:"Maximum clip size (MB) to upload when replacing the snapshot. Telegram's cloud Bot API caps uploads at 50 MB; a self-hosted local Bot API server allows up to 2000 MB" default:"50"`
+	ClipTranscode            bool   `koanf:"clip_transcode" json:"clip_transcode,omitempty" doc:"Re-encode the clip with ffmpeg to a smaller H.264/AAC video before uploading it (requires ffmpeg)" default:"false"`
+	ClipTranscodeHeight      int    `koanf:"clip_transcode_height" json:"clip_transcode_height,omitempty" doc:"Maximum height (pixels) of the transcoded clip. Smaller clips are not upscaled" default:"720"`
+	ClipTranscodeBitrate     int    `koanf:"clip_transcode_bitrate" json:"clip_transcode_bitrate,omitempty" doc:"Maximum video bitrate (kbit/s) of the transcoded clip" default:"1000"`
+	ClipTranscodeTimeout     int    `koanf:"clip_transcode_timeout" json:"clip_transcode_timeout,omitempty" doc:"Seconds to wait for ffmpeg before giving up on the clip" default:"120"`
+	ClipTranscodeVAAPIDevice string `koanf:"clip_transcode_vaapi_device" json:"clip_transcode_vaapi_device,omitempty" doc:"VAAPI render device (e.g. /dev/dri/renderD128) to transcode on the GPU, falling back to software if it fails" default:""`
 }
 
 type Webhook struct {

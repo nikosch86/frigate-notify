@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/0x2142/frigate-notify/models"
@@ -406,6 +408,24 @@ func TestValidateTelegram(t *testing.T) {
 
 	// Test missing Token
 	config.Alerts.Telegram[0].Token = ""
+	result = config.validateTelegram(0)
+	expected = 2
+	if len(result) != expected {
+		t.Errorf("Expected: %v error(s), Got: %v", expected, result)
+	}
+
+	// Test clip transcode without ffmpeg installed
+	path := t.TempDir()
+	t.Setenv("PATH", path)
+	config.Alerts.Telegram[0].ClipTranscode = true
+	result = config.validateTelegram(0)
+	expected = 3
+	if len(result) != expected {
+		t.Errorf("Expected: %v error(s), Got: %v", expected, result)
+	}
+
+	// Test clip transcode with ffmpeg installed
+	os.WriteFile(filepath.Join(path, "ffmpeg"), nil, 0o755)
 	result = config.validateTelegram(0)
 	expected = 2
 	if len(result) != expected {
