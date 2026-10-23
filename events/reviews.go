@@ -96,7 +96,7 @@ func processReview(review models.Review) {
 
 		// Check that event passes configured filters
 		detection.CurrentZones = detection.Zones
-		if !checkEventFilters(detection) {
+		if !checkEventFilters(detection, false) {
 			reviewFiltered = true
 			break
 		}
@@ -122,6 +122,23 @@ func processReview(review models.Review) {
 			Msgf("Review dropped - One or more detections are filtered")
 		return
 	}
+
+	// Skip objects already notified on their current zones, so they cannot keep
+	// a new object in the same review from alerting. Zones are only marked here,
+	// once the review is known to pass the filters.
+	var newDetections []models.Event
+	for _, detection := range detections {
+		if !notifiedOnZone(detection) {
+			newDetections = append(newDetections, detection)
+		}
+	}
+	if len(newDetections) == 0 {
+		log.Info().
+			Str("review_id", review.ID).
+			Msg("Review dropped - All objects already notified on their zones")
+		return
+	}
+	detections = newDetections
 
 	// Set ReviewID for notification cache tracking
 	detections[0].Extra.ReviewID = review.ID

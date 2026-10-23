@@ -43,7 +43,7 @@ func processEvent(event models.Event) {
 	}
 
 	// Check that event passes configured filters
-	if !checkEventFilters(event) {
+	if !checkEventFilters(event, true) {
 		return
 	}
 

@@ -10,6 +10,7 @@
  - Fix GenAI update notifications being sent for reviews whose initial alert was dropped (e.g. detection-only reviews with `notify_detections` off, or filtered zones/labels/cameras)
  - Fix duplicate Telegram alerts when a GenAI update arrived while the initial alert was still being sent; the update now waits for that alert and edits it
  - In `reviews` mode, a tracked object now alerts only once per zone even when it appears in several Frigate reviews (previously each new review could alert again)
+ - In `reviews` mode, an object that already alerted on its zone no longer stops a new object in the same review from alerting; the alert is sent for the new objects
 
 ## [v0.5.4](https://github.com/0x2142/frigate-notify/releases/tag/v0.5.4) - Jan 13 2026
  - Add option to use UUID as message ID for SMTP alerts

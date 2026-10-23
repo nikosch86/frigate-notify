@@ -11,8 +11,9 @@ import (
 	"github.com/0x2142/frigate-notify/models"
 )
 
-// checkEventFilters processes incoming event through configured filters to determine if it should generate a notification
-func checkEventFilters(event models.Event) bool {
+// checkEventFilters processes incoming event through configured filters to determine if it should generate a notification.
+// With checkZones false the already-notified zone check is skipped and left to the caller.
+func checkEventFilters(event models.Event, checkZones bool) bool {
 	// Check if audio event
 	if event.Data.Type == "audio" && config.ConfigData.Alerts.General.AudioOnly == "drop" {
 		log.Info().Msg("Event dropped - Audio only.")
@@ -56,21 +57,8 @@ func checkEventFilters(event models.Event) bool {
 	}
 
 	// Check if already notified on zones
-	if zoneAlreadyAlerted(event) {
-		log.Info().
-			Str("event_id", event.ID).
-			Str("camera", event.Camera).
-			Str("label", event.Label).
-			Str("zones", strings.Join(event.CurrentZones, ",")).
-			Msg("Event dropped - Already notified on this zone")
+	if checkZones && notifiedOnZone(event) {
 		return false
-	} else {
-		log.Debug().
-			Str("event_id", event.ID).
-			Str("camera", event.Camera).
-			Str("label", event.Label).
-			Str("zones", strings.Join(event.CurrentZones, ",")).
-			Msg("Object entered new zone")
 	}
 
 	// Drop event if no snapshot & skip_nosnap is true
@@ -123,6 +111,27 @@ func checkEventFilters(event models.Event) bool {
 
 	// Default
 	return true
+}
+
+// notifiedOnZone reports whether the event already alerted on all of its current
+// zones, and otherwise records those zones as alerted
+func notifiedOnZone(event models.Event) bool {
+	if zoneAlreadyAlerted(event) {
+		log.Info().
+			Str("event_id", event.ID).
+			Str("camera", event.Camera).
+			Str("label", event.Label).
+			Str("zones", strings.Join(event.CurrentZones, ",")).
+			Msg("Event dropped - Already notified on this zone")
+		return true
+	}
+	log.Debug().
+		Str("event_id", event.ID).
+		Str("camera", event.Camera).
+		Str("label", event.Label).
+		Str("zones", strings.Join(event.CurrentZones, ",")).
+		Msg("Object entered new zone")
+	return false
 }
 
 // isQuietHours checks to see if current event time is within window for supressing notifications

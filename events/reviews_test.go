@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path"
 	"testing"
 	"time"
 
@@ -97,6 +98,8 @@ func TestApplyGenAIMetadataZeroValues(t *testing.T) {
 type genaiUpdateFixture struct {
 	frigateHits []string
 	webhookBody chan map[string]string
+	// detections overrides the detection JSON served for the given IDs
+	detections map[string]string
 }
 
 func newGenAIUpdateFixture(t *testing.T, frigateStatus int, detectionJSON string) *genaiUpdateFixture {
@@ -115,6 +118,10 @@ func newGenAIUpdateFixture(t *testing.T, frigateStatus int, detectionJSON string
 	frigate := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.frigateHits = append(f.frigateHits, r.URL.Path)
 		w.WriteHeader(frigateStatus)
+		if body, ok := f.detections[path.Base(r.URL.Path)]; ok {
+			w.Write([]byte(body))
+			return
+		}
 		w.Write([]byte(detectionJSON))
 	}))
 	t.Cleanup(frigate.Close)
@@ -144,6 +151,7 @@ func newGenAIUpdateFixture(t *testing.T, frigateStatus int, detectionJSON string
 		"review_link":  "{{ .Extra.ReviewLink }}",
 		"score":        "{{ .Extra.TopScorePercent }}",
 		"zones":        "{{ .Extra.ZoneList }}",
+		"event_id":     "{{ .ID }}",
 	}
 	config.ConfigData.Alerts.Webhook = []models.Webhook{profile}
 	config.Internal.Status.Notifications.Webhook = make([]models.NotifierStatus, 1)
@@ -347,5 +355,60 @@ func TestGenAIUpdateFollowsInitialReview(t *testing.T) {
 				t.Errorf("GenAI update = %v, want genai_update=true title=%q", got, meta.Title)
 			}
 		})
+	}
+}
+
+// zoneTestDetection returns the Frigate JSON of a person detection in zone porch.
+func zoneTestDetection(id, label string) string {
+	return `{"id":"` + id + `","camera":"front_door","label":"` + label + `","zones":["porch"],"has_clip":true,"data":{"top_score":0.9}}`
+}
+
+// TestReviewSkipsObjectsAlreadyNotifiedOnZone checks that an object which
+// already alerted on its zone is skipped instead of dropping the review, so a
+// new object in the same review still alerts, and the review alerts only once.
+func TestReviewSkipsObjectsAlreadyNotifiedOnZone(t *testing.T) {
+	f := newGenAIUpdateFixture(t, http.StatusOK, genaiDetectionJSON)
+	f.detections = map[string]string{
+		"det-old": zoneTestDetection("det-old", "person"),
+		"det-new": zoneTestDetection("det-new", "person"),
+	}
+	setZoneAlerted(models.Event{ID: "det-old", CurrentZones: []string{"porch"}})
+
+	review := genaiReview("rev-2", []string{"det-old", "det-new"}, nil)
+	review.Severity = "alert"
+	processReview(review)
+	if got := f.waitForWebhook(t); got["event_id"] != "det-new" {
+		t.Errorf("alert for event %q, want the new object det-new", got["event_id"])
+	}
+
+	config.Internal.Status.LastNotification = time.Time{}
+	processReview(review)
+	if !config.Internal.Status.LastNotification.IsZero() {
+		t.Error("review with only objects already notified on their zones should not alert again")
+	}
+}
+
+// TestReviewFilteredDoesNotMarkZones checks that a review dropped by a filter
+// leaves its objects' zones unmarked, so they can still alert in a later review.
+func TestReviewFilteredDoesNotMarkZones(t *testing.T) {
+	f := newGenAIUpdateFixture(t, http.StatusOK, genaiDetectionJSON)
+	f.detections = map[string]string{
+		"det-person": zoneTestDetection("det-person", "person"),
+		"det-car":    zoneTestDetection("det-car", "car"),
+	}
+	config.ConfigData.Alerts.Labels.Block = []string{"car"}
+
+	review := genaiReview("rev-1", []string{"det-person", "det-car"}, nil)
+	review.Severity = "alert"
+	processReview(review)
+	if !config.Internal.Status.LastNotification.IsZero() {
+		t.Fatal("review with a blocked label should be dropped")
+	}
+
+	later := genaiReview("rev-2", []string{"det-person"}, nil)
+	later.Severity = "alert"
+	processReview(later)
+	if got := f.waitForWebhook(t); got["event_id"] != "det-person" {
+		t.Errorf("alert for event %q, want det-person", got["event_id"])
 	}
 }
