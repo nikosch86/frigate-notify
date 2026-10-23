@@ -97,6 +97,7 @@ func SendTelegramMessage(event models.Event, snapshot io.Reader, provider notifM
 	if err != nil {
 		log.Warn().
 			Str("event_id", event.ID).
+			Str("review_id", event.Extra.ReviewID).
 			Str("provider", "Telegram").
 			Int("provider_id", provider.index).
 			Err(err).
@@ -192,6 +193,7 @@ func SendTelegramMessage(event models.Event, snapshot io.Reader, provider notifM
 	if err != nil {
 		log.Warn().
 			Str("event_id", event.ID).
+			Str("review_id", event.Extra.ReviewID).
 			Str("provider", "Telegram").
 			Int("provider_id", provider.index).
 			Err(err).
@@ -242,6 +244,7 @@ func sendTelegramSnapshotThenClip(bot *tgbotapi.BotAPI, profile models.Telegram,
 	if err != nil {
 		log.Warn().
 			Str("event_id", event.ID).
+			Str("review_id", event.Extra.ReviewID).
 			Str("provider", "Telegram").
 			Int("provider_id", provider.index).
 			Err(err).
@@ -274,6 +277,7 @@ func sendTelegramSnapshotThenClip(bot *tgbotapi.BotAPI, profile models.Telegram,
 	if clip == nil {
 		log.Info().
 			Str("event_id", event.ID).
+			Str("review_id", event.Extra.ReviewID).
 			Str("provider", "Telegram").
 			Int("provider_id", provider.index).
 			Msg("Clip unavailable, keeping snapshot")
@@ -288,6 +292,7 @@ func sendTelegramSnapshotThenClip(bot *tgbotapi.BotAPI, profile models.Telegram,
 	if err != nil || len(clipBytes) == 0 {
 		log.Warn().
 			Str("event_id", event.ID).
+			Str("review_id", event.Extra.ReviewID).
 			Str("provider", "Telegram").
 			Int("provider_id", provider.index).
 			Err(err).
@@ -300,6 +305,7 @@ func sendTelegramSnapshotThenClip(bot *tgbotapi.BotAPI, profile models.Telegram,
 	if int64(len(clipBytes)) > maxBytes {
 		log.Info().
 			Str("event_id", event.ID).
+			Str("review_id", event.Extra.ReviewID).
 			Str("provider", "Telegram").
 			Int("provider_id", provider.index).
 			Int("clip_bytes", len(clipBytes)).
@@ -321,6 +327,7 @@ func sendTelegramSnapshotThenClip(bot *tgbotapi.BotAPI, profile models.Telegram,
 		if _, err := bot.Send(msg); err != nil {
 			log.Warn().
 				Str("event_id", event.ID).
+				Str("review_id", event.Extra.ReviewID).
 				Str("provider", "Telegram").
 				Int("provider_id", provider.index).
 				Err(err).
@@ -329,6 +336,7 @@ func sendTelegramSnapshotThenClip(bot *tgbotapi.BotAPI, profile models.Telegram,
 		}
 		log.Info().
 			Str("event_id", event.ID).
+			Str("review_id", event.Extra.ReviewID).
 			Str("provider", "Telegram").
 			Int("provider_id", provider.index).
 			Msg("Clip sent")
@@ -346,6 +354,7 @@ func sendTelegramSnapshotThenClip(bot *tgbotapi.BotAPI, profile models.Telegram,
 		// failure - just log and keep the snapshot
 		log.Warn().
 			Str("event_id", event.ID).
+			Str("review_id", event.Extra.ReviewID).
 			Str("provider", "Telegram").
 			Int("provider_id", provider.index).
 			Err(err).

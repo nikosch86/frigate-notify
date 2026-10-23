@@ -3,6 +3,7 @@ package events
 import (
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/0x2142/frigate-notify/models"
@@ -13,6 +14,10 @@ import (
 )
 
 var zoneCache otter.Cache[string, []string]
+
+// zoneMu makes checking and recording an event's zones one step, so concurrent
+// checks of the same event and zone alert only once
+var zoneMu sync.Mutex
 var notifCache otter.Cache[string, string]
 
 func InitZoneCache() {
@@ -68,14 +73,20 @@ func GetNotifMessageID(reviewID, provider string) string {
 	return messageID
 }
 
-// setReviewNotified records that an alert was dispatched for a review
-func setReviewNotified(reviewID string) {
-	notifCache.Set(reviewID+":notified", "")
+// setReviewNotified records that an alert was dispatched for a review, led by eventID
+func setReviewNotified(reviewID, eventID string) {
+	notifCache.Set(reviewID+":notified", eventID)
 }
 
 // reviewNotified reports whether an alert was dispatched for a review
 func reviewNotified(reviewID string) bool {
 	return notifCache.Has(reviewID + ":notified")
+}
+
+// notifiedEventID returns the event the review's latest alert led with
+func notifiedEventID(reviewID string) string {
+	eventID, _ := notifCache.Get(reviewID + ":notified")
+	return eventID
 }
 
 // Add zone to list of zones that have already generated notifications for specified event ID
@@ -114,6 +125,8 @@ func getCachebyID(id string) []string {
 
 // Query cache to see if zone already generated alert
 func zoneAlreadyAlerted(event models.Event) bool {
+	zoneMu.Lock()
+	defer zoneMu.Unlock()
 	// Check if event already in cache & if so, get contents
 	alreadyAlerted, ok := zoneCache.Get(event.ID)
 	log.Trace().

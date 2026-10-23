@@ -12,8 +12,8 @@ import (
 )
 
 // checkEventFilters processes incoming event through configured filters to determine if it should generate a notification.
-// With checkZones false the already-notified zone check is skipped and left to the caller.
-func checkEventFilters(event models.Event, checkZones bool) bool {
+// With checkNotified false the already-notified checks are skipped and left to the caller.
+func checkEventFilters(event models.Event, checkNotified bool) bool {
 	// Check if audio event
 	if event.Data.Type == "audio" && config.ConfigData.Alerts.General.AudioOnly == "drop" {
 		log.Info().Msg("Event dropped - Audio only.")
@@ -45,19 +45,8 @@ func checkEventFilters(event models.Event, checkZones bool) bool {
 		return false
 	}
 
-	// Check if notify_once is set & we already notified on this event
-	if config.ConfigData.Alerts.General.NotifyOnce {
-		// Check if cache already contains event ID
-		if getCachebyID(event.ID) != nil {
-			log.Info().
-				Str("event_id", event.ID).
-				Msg("Event dropped - Already notified & notify_once is set")
-			return false
-		}
-	}
-
-	// Check if already notified on zones
-	if checkZones && notifiedOnZone(event) {
+	// Check if already notified on this event or its zones
+	if checkNotified && alreadyNotified(event) {
 		return false
 	}
 
@@ -113,9 +102,20 @@ func checkEventFilters(event models.Event, checkZones bool) bool {
 	return true
 }
 
-// notifiedOnZone reports whether the event already alerted on all of its current
-// zones, and otherwise records those zones as alerted
-func notifiedOnZone(event models.Event) bool {
+// alreadyNotified reports whether the event already alerted, with notify_once
+// set, or on all of its current zones; otherwise it records those zones as alerted
+func alreadyNotified(event models.Event) bool {
+	// Check if notify_once is set & we already notified on this event
+	if config.ConfigData.Alerts.General.NotifyOnce {
+		// Check if cache already contains event ID
+		if getCachebyID(event.ID) != nil {
+			log.Info().
+				Str("event_id", event.ID).
+				Msg("Event dropped - Already notified & notify_once is set")
+			return true
+		}
+	}
+
 	if zoneAlreadyAlerted(event) {
 		log.Info().
 			Str("event_id", event.ID).

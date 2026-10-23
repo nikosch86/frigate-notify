@@ -170,87 +170,87 @@ func TestTelegramGenAISummaryAfterSnapshotThenClipE2E(t *testing.T) {
 }
 
 // TestTelegramGenAIUpdateDuringDeliveryE2E sends a GenAI update while the alert
-// is held at its snapshot download and checks that the update waits, then edits
-// the delivered message's caption after the clip swap so the swap cannot undo it.
+// is held at its snapshot or clip download and checks that the update waits, then
+// edits the delivered message's caption after the clip swap so it cannot be undone.
 func TestTelegramGenAIUpdateDuringDeliveryE2E(t *testing.T) {
-	const (
-		reviewID   = "review-race-1"
-		genaiTitle = "Person at the front gate"
-	)
+	for _, held := range []string{"/snapshot.jpg", "/clip.mp4"} {
+		t.Run(held, func(t *testing.T) {
+			const genaiTitle = "Person at the front gate"
+			reviewID := "review-race" + held
 
-	// Mock Frigate: hold the first snapshot download (the original alert's)
-	// until released; serve later snapshots and the clip right away.
-	snapshotRequested := make(chan struct{})
-	releaseSnapshot := make(chan struct{})
-	var firstSnapshot sync.Once
-	frigate := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, "/snapshot.jpg") {
-			first := false
-			firstSnapshot.Do(func() {
-				first = true
-				close(snapshotRequested)
-			})
-			if first {
-				<-releaseSnapshot
+			// Mock Frigate: hold the first download of the held file (the original
+			// alert's) until released; serve everything else right away.
+			heldRequested := make(chan struct{})
+			releaseHeld := make(chan struct{})
+			var firstHeld sync.Once
+			frigate := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if strings.HasSuffix(r.URL.Path, held) {
+					first := false
+					firstHeld.Do(func() {
+						first = true
+						close(heldRequested)
+					})
+					if first {
+						<-releaseHeld
+					}
+				}
+				w.Write([]byte("FAKE-MEDIA"))
+			}))
+			defer frigate.Close()
+
+			tg, reqs, mu := newMockTelegram(t)
+			defer tg.Close()
+			useTelegramE2ESeams(t, tg)
+
+			origConfig := config.ConfigData
+			t.Cleanup(func() { config.ConfigData = origConfig })
+			config.ConfigData = config.Config{}
+			config.ConfigData.Frigate.Server = frigate.URL
+			config.ConfigData.Alerts.General.MaxSnapRetry = 2
+			profile := models.Telegram{ChatID: 1, ClipMaxSize: 50, SendClipAfterSnapshot: true}
+			profile.Enabled = true
+			config.ConfigData.Alerts.Telegram = []models.Telegram{profile}
+			config.Internal.Status.Notifications.Telegram = make([]models.NotifierStatus, 1)
+
+			// Both SendAlert calls must have returned before the config is restored.
+			var sends sync.WaitGroup
+			defer sends.Wait()
+
+			alert := models.Event{ID: "evt1", Camera: "front_gate", HasSnapshot: true, HasClip: true}
+			alert.Extra.ReviewID = reviewID
+			sends.Go(func() { SendAlert([]models.Event{alert}) })
+
+			select {
+			case <-heldRequested:
+			case <-time.After(5 * time.Second):
+				t.Fatalf("original alert never requested %s", held)
 			}
-			w.Write([]byte("FAKE-SNAPSHOT"))
-			return
-		}
-		w.Write([]byte("FAKE-CLIP-BYTES"))
-	}))
-	defer frigate.Close()
 
-	tg, reqs, mu := newMockTelegram(t)
-	defer tg.Close()
-	useTelegramE2ESeams(t, tg)
+			update := alert
+			update.Extra.IsGenAIUpdate = true
+			update.Extra.GenAITitle = genaiTitle
+			sends.Go(func() { SendAlert([]models.Event{update}) })
 
-	origConfig := config.ConfigData
-	t.Cleanup(func() { config.ConfigData = origConfig })
-	config.ConfigData = config.Config{}
-	config.ConfigData.Frigate.Server = frigate.URL
-	config.ConfigData.Alerts.General.MaxSnapRetry = 2
-	profile := models.Telegram{ChatID: 1, ClipMaxSize: 50, SendClipAfterSnapshot: true}
-	profile.Enabled = true
-	config.ConfigData.Alerts.Telegram = []models.Telegram{profile}
-	config.Internal.Status.Notifications.Telegram = make([]models.NotifierStatus, 1)
+			// Give an update that does not wait the chance to post its own alert.
+			time.Sleep(200 * time.Millisecond)
+			close(releaseHeld)
 
-	// Both SendAlert calls must have returned before the config is restored.
-	var sends sync.WaitGroup
-	defer sends.Wait()
-
-	alert := models.Event{ID: "evt1", Camera: "front_gate", HasSnapshot: true, HasClip: true}
-	alert.Extra.ReviewID = reviewID
-	sends.Go(func() { SendAlert([]models.Event{alert}) })
-
-	select {
-	case <-snapshotRequested:
-	case <-time.After(5 * time.Second):
-		t.Fatal("original alert never requested its snapshot")
-	}
-
-	update := alert
-	update.Extra.IsGenAIUpdate = true
-	update.Extra.GenAITitle = genaiTitle
-	sends.Go(func() { SendAlert([]models.Event{update}) })
-
-	// Give an update that does not wait the chance to post its own alert.
-	time.Sleep(200 * time.Millisecond)
-	close(releaseSnapshot)
-
-	calls := waitForTelegramCalls(t, reqs, mu, 3)
-	want := []string{"sendPhoto", "editMessageMedia", "editMessageCaption"}
-	if got := endpoints(calls); !slices.Equal(got, want) {
-		t.Fatalf("expected call sequence %v, got %v", want, got)
-	}
-	captionParams, err := url.ParseQuery(calls[2].body)
-	if err != nil {
-		t.Fatalf("could not parse editMessageCaption body: %v", err)
-	}
-	if got := captionParams.Get("message_id"); got != "555" {
-		t.Errorf("editMessageCaption should target the delivered message 555, got %q", got)
-	}
-	if caption := captionParams.Get("caption"); !strings.Contains(caption, genaiTitle) {
-		t.Errorf("edited caption should contain the GenAI title %q, got: %q", genaiTitle, caption)
+			calls := waitForTelegramCalls(t, reqs, mu, 3)
+			want := []string{"sendPhoto", "editMessageMedia", "editMessageCaption"}
+			if got := endpoints(calls); !slices.Equal(got, want) {
+				t.Fatalf("expected call sequence %v, got %v", want, got)
+			}
+			captionParams, err := url.ParseQuery(calls[2].body)
+			if err != nil {
+				t.Fatalf("could not parse editMessageCaption body: %v", err)
+			}
+			if got := captionParams.Get("message_id"); got != "555" {
+				t.Errorf("editMessageCaption should target the delivered message 555, got %q", got)
+			}
+			if caption := captionParams.Get("caption"); !strings.Contains(caption, genaiTitle) {
+				t.Errorf("edited caption should contain the GenAI title %q, got: %q", genaiTitle, caption)
+			}
+		})
 	}
 }
 

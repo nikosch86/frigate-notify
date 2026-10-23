@@ -92,41 +92,75 @@ func waitForDeliveryEntryGone(t *testing.T, reviewID string) {
 	}
 }
 
-// TestAwaitAlertDelivery covers the two exits from awaitAlertDelivery that do
-// not need a real delivery: no pending entry, and the timeout.
-func TestAwaitAlertDelivery(t *testing.T) {
-	t.Run("returns at once without a pending delivery", func(t *testing.T) {
-		origWait := genAIDeliveryWait
-		t.Cleanup(func() { genAIDeliveryWait = origWait })
-		genAIDeliveryWait = 10 * time.Second
+// startAwait runs awaitAlertDelivery for reviewID in the background and
+// returns a channel that is closed once it returns.
+func startAwait(reviewID string) <-chan struct{} {
+	done := make(chan struct{})
+	go func() {
+		awaitAlertDelivery(reviewID)
+		close(done)
+	}()
+	return done
+}
 
-		start := time.Now()
-		awaitAlertDelivery("rev-none")
-		if elapsed := time.Since(start); elapsed >= genAIDeliveryWait {
-			t.Fatalf("waited %v for a review with no pending delivery", elapsed)
-		}
-	})
+// assertWaiting fails the test if the await has already returned; a returning
+// await shows up within the grace period, so this cannot fail on correct code.
+func assertWaiting(t *testing.T, done <-chan struct{}, msg string) {
+	t.Helper()
+	select {
+	case <-done:
+		t.Fatal(msg)
+	case <-time.After(50 * time.Millisecond):
+	}
+}
 
-	t.Run("gives up after genAIDeliveryWait", func(t *testing.T) {
-		origWait := genAIDeliveryWait
-		t.Cleanup(func() { genAIDeliveryWait = origWait })
-		genAIDeliveryWait = 20 * time.Millisecond
+// assertReturns fails the test if the await does not return.
+func assertReturns(t *testing.T, done <-chan struct{}, msg string) {
+	t.Helper()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal(msg)
+	}
+}
 
-		// A delivery that never drains, so only the timeout can end the wait.
-		var stuck sync.WaitGroup
-		stuck.Add(1)
-		alertDeliveries.Store("rev-stuck", &stuck)
-		t.Cleanup(func() {
-			stuck.Done()
-			alertDeliveries.Delete("rev-stuck")
-		})
+// TestAwaitAlertDeliveryWithoutPending checks the wait returns at once when no
+// alert for the review is being delivered.
+func TestAwaitAlertDeliveryWithoutPending(t *testing.T) {
+	assertReturns(t, startAwait("rev-none"), "await blocked on a review with no pending delivery")
+}
 
-		start := time.Now()
-		awaitAlertDelivery("rev-stuck")
-		if elapsed := time.Since(start); elapsed < genAIDeliveryWait {
-			t.Fatalf("returned after %v, before genAIDeliveryWait elapsed", elapsed)
-		}
-	})
+// TestAwaitAlertDeliveryWaitsForEveryProvider checks a GenAI update also waits
+// for providers other than Telegram, so its follow-up lands after the alert.
+func TestAwaitAlertDeliveryWaitsForEveryProvider(t *testing.T) {
+	releases := setupBlockingWebhook(t, "evt-1")
+	const reviewID = "rev-webhook"
+
+	SendAlert([]models.Event{deliveryTestEvent("evt-1", reviewID)})
+	done := startAwait(reviewID)
+	assertWaiting(t, done, "await returned while the webhook send was in flight")
+
+	releases["evt-1"]()
+	assertReturns(t, done, "await did not return after the webhook send finished")
+}
+
+// TestAwaitAlertDeliveryWaitsForLaterAlert checks a GenAI update also waits for
+// an alert of the same review that starts while it is already waiting.
+func TestAwaitAlertDeliveryWaitsForLaterAlert(t *testing.T) {
+	releases := setupBlockingWebhook(t, "evt-1", "evt-2")
+	const reviewID = "rev-later"
+
+	SendAlert([]models.Event{deliveryTestEvent("evt-1", reviewID)})
+	done := startAwait(reviewID)
+	// Let the await pick up the first delivery before the second replaces it.
+	time.Sleep(20 * time.Millisecond)
+	SendAlert([]models.Event{deliveryTestEvent("evt-2", reviewID)})
+
+	releases["evt-1"]()
+	assertWaiting(t, done, "await returned while the later alert was in flight")
+
+	releases["evt-2"]()
+	assertReturns(t, done, "await did not return after the later alert finished")
 }
 
 // TestSendAlertRemovesDeliveryEntryAfterDrain checks the entry exists while a
@@ -182,7 +216,7 @@ func TestSendAlertMarksReviewNotifiedAfterRegistering(t *testing.T) {
 	origSet := ReviewNotifiedSet
 	t.Cleanup(func() { ReviewNotifiedSet = origSet })
 	var marked, registered bool
-	ReviewNotifiedSet = func(id string) {
+	ReviewNotifiedSet = func(id, _ string) {
 		marked = id == reviewID
 		_, registered = alertDeliveries.Load(id)
 	}

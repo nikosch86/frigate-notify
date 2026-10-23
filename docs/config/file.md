@@ -250,7 +250,7 @@ All alert providers (Discord, Gotify, etc) also support optional filters & the a
         - GenAI data may arrive after the initial notification has already been sent
         - Set to `true` to send an updated notification when GenAI data becomes available
         - Updates are only sent for reviews that produced an initial notification
-        - If the initial notification is still being sent (e.g. waiting for the snapshot or clip), the update waits for it to finish, up to 5 minutes
+        - If the initial notification is still being sent (e.g. waiting for the snapshot or clip), the update waits for it to finish and then edits it
         - Set to `false` to only include GenAI data if it is available at the time of the initial notification
     - **summary_idle_time** (Optional - Default: `300`)
         - Env: `FN_ALERTS__GENERAL__GENAI__SUMMARY_IDLE_TIME`
@@ -311,7 +311,7 @@ This config section allows control over whether to generate alerts on all zones,
 
     In order to reduce the number of notifications generated, this app will only alert on the *first time* the detected object enters a zone.
 
-    In `reviews` mode this holds for the lifetime of the tracked object, even when it spans several Frigate reviews: an object that already alerted on a zone does not alert on it again in a later review. This is remembered for up to 1 hour. A review alerts when at least one of its objects is in a zone it has not alerted on yet, and the alert covers only those objects; objects that already alerted are left out instead of holding back the whole review.
+    In `reviews` mode this holds for the lifetime of the tracked object, even when it spans several Frigate reviews: an object that already alerted on a zone does not alert on it again in a later review. The zones an object alerted on are remembered until it has gone 1 hour without alerting on a new zone. A review alerts when at least one of its objects is in a zone it has not alerted on yet, and the alert covers only those objects; objects that already alerted are left out instead of holding back the whole review.
 
     For example, let's say you have a camera in your front yard with zones for sidewalk, driveway, and lawn - but only allow notifications for driveway and lawn. During an event someone was detected originally on the sidewalk, then driveway, lawn, and back to driveway. In this case, you should only receive two notifications. Once for the first time the person entered the driveway zone, and a second when they entered the lawn zone. 
 

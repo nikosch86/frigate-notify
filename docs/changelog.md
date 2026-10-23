@@ -8,9 +8,10 @@
  - Include Frigate's error message when a GenAI activity summary request is rejected
  - Fix GenAI activity summaries being sent with Frigate's "No activity/concerns were found" placeholder text; a summary is now only requested when a review in the period was flagged by GenAI
  - Fix GenAI update notifications being sent for reviews whose initial alert was dropped (e.g. detection-only reviews with `notify_detections` off, or filtered zones/labels/cameras)
- - Fix duplicate Telegram alerts when a GenAI update arrived while the initial alert was still being sent; the update now waits for that alert and edits it
- - In `reviews` mode, a tracked object now alerts only once per zone even when it appears in several Frigate reviews (previously each new review could alert again)
- - In `reviews` mode, an object that already alerted on its zone no longer stops a new object in the same review from alerting; the alert is sent for the new objects
+ - Fix duplicate Telegram alerts, and GenAI captions being undone by the clip swap, when a GenAI update arrived while the initial alert was still being sent; the update now waits for that alert to finish and then edits it
+ - In `reviews` mode, a tracked object now alerts only once per zone even when it appears in several Frigate reviews, until it has gone 1 hour without alerting on a new zone (previously each new review could alert again)
+ - In `reviews` mode, an object that already alerted (on its zone, or at all with `notify_once`) no longer stops a new object in the same review from alerting; the alert is sent for the new objects
+ - In `reviews` mode, an object dropped by a filter (e.g. quiet hours or `min_score`) can still alert once it passes; previously its zone already counted as notified
 
 ## [v0.5.4](https://github.com/0x2142/frigate-notify/releases/tag/v0.5.4) - Jan 13 2026
  - Add option to use UUID as message ID for SMTP alerts

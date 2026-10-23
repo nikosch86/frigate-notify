@@ -158,6 +158,7 @@ func transcodeTelegramClip(clip io.Reader, event models.Event, profile models.Te
 		if transcoded, encoder, err = transcodeClip(source, profile); err == nil {
 			log.Info().
 				Str("event_id", event.ID).
+				Str("review_id", event.Extra.ReviewID).
 				Str("provider", "Telegram").
 				Int("provider_id", provider.index).
 				Str("encoder", encoder).
@@ -169,6 +170,7 @@ func transcodeTelegramClip(clip io.Reader, event models.Event, profile models.Te
 			if len(transcoded) >= len(source) {
 				log.Info().
 					Str("event_id", event.ID).
+					Str("review_id", event.Extra.ReviewID).
 					Str("provider", "Telegram").
 					Int("provider_id", provider.index).
 					Msg("Transcoded clip is not smaller, using original clip")
@@ -179,6 +181,7 @@ func transcodeTelegramClip(clip io.Reader, event models.Event, profile models.Te
 	}
 	log.Warn().
 		Str("event_id", event.ID).
+		Str("review_id", event.Extra.ReviewID).
 		Str("provider", "Telegram").
 		Int("provider_id", provider.index).
 		Err(err).

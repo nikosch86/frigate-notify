@@ -1,6 +1,9 @@
 package events
 
 import (
+	"fmt"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/0x2142/frigate-notify/models"
@@ -91,5 +94,32 @@ func TestDelZoneAlerted(t *testing.T) {
 	_, ok := zoneCache.Get(event.ID)
 	if ok {
 		t.Errorf("Cache entry not deleted")
+	}
+}
+
+// TestZoneAlreadyAlertedConcurrent checks that when several reviews check the
+// same object and zone at once, exactly one of them gets to alert.
+func TestZoneAlreadyAlertedConcurrent(t *testing.T) {
+	InitZoneCache()
+	defer CloseZoneCache()
+
+	for i := range 200 {
+		event := models.Event{ID: fmt.Sprintf("evt-%d", i), CurrentZones: []string{"in"}}
+		start := make(chan struct{})
+		var alerts atomic.Int32
+		var checks sync.WaitGroup
+		for range 8 {
+			checks.Go(func() {
+				<-start
+				if !zoneAlreadyAlerted(event) {
+					alerts.Add(1)
+				}
+			})
+		}
+		close(start)
+		checks.Wait()
+		if n := alerts.Load(); n != 1 {
+			t.Fatalf("round %d: %d concurrent checks alerted, want 1", i, n)
+		}
 	}
 }

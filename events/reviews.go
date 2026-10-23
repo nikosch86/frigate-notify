@@ -3,6 +3,7 @@ package events
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -123,12 +124,12 @@ func processReview(review models.Review) {
 		return
 	}
 
-	// Skip objects already notified on their current zones, so they cannot keep
-	// a new object in the same review from alerting. Zones are only marked here,
-	// once the review is known to pass the filters.
+	// Skip objects already notified, so they cannot keep a new object in the same
+	// review from alerting. Zones are only marked here, once the review is known
+	// to pass the filters.
 	var newDetections []models.Event
 	for _, detection := range detections {
-		if !notifiedOnZone(detection) {
+		if !alreadyNotified(detection) {
 			newDetections = append(newDetections, detection)
 		}
 	}
@@ -238,6 +239,12 @@ func processGenAIReviewUpdate(review models.Review) {
 			Str("review_id", review.ID).
 			Msg("GenAI update dropped - No detections found")
 		return
+	}
+
+	// Lead with the object the alert led with, so the update describes it again
+	lead := notifiedEventID(review.ID)
+	if i := slices.IndexFunc(detections, func(d models.Event) bool { return d.ID == lead }); i > 0 {
+		detections[0], detections[i] = detections[i], detections[0]
 	}
 
 	// Populate GenAI fields from review metadata

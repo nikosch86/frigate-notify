@@ -32,18 +32,14 @@ var TemplateFiles fs.FS
 var NotifCacheSet func(reviewID, provider, messageID string)
 var NotifCacheGet func(reviewID, provider string) string
 
-// ReviewNotifiedSet is set by the events package to mark a review as notified.
-var ReviewNotifiedSet func(reviewID string)
+// ReviewNotifiedSet is set by the events package to mark a review as notified,
+// recording the event its alert led with.
+var ReviewNotifiedSet func(reviewID, eventID string)
 
-// alertDeliveries holds the provider sends still running for a review's alert,
-// so a GenAI update arriving meanwhile waits for them and edits the delivered
-// message instead of sending a second alert.
+// alertDeliveries holds the provider sends still running for a review's latest
+// alert, so a GenAI update arriving meanwhile waits for them and edits the
+// delivered message instead of sending a second alert.
 var alertDeliveries sync.Map // review ID -> *sync.WaitGroup
-
-// genAIDeliveryWait bounds how long a GenAI update waits for that delivery; it
-// covers snapshot and clip retries plus a clip re-encode. It is a var so tests
-// can shorten it.
-var genAIDeliveryWait = 5 * time.Minute
 
 type notifMeta struct {
 	name  string
@@ -63,7 +59,7 @@ func SendAlert(events []models.Event) {
 			alertDeliveries.Store(reviewID, &deliveries)
 			// Mark the review notified only once its delivery can be waited on
 			if ReviewNotifiedSet != nil {
-				ReviewNotifiedSet(reviewID)
+				ReviewNotifiedSet(reviewID, events[0].ID)
 			}
 			defer func() {
 				deliveries.Done()
@@ -204,28 +200,20 @@ func SendAlert(events []models.Event) {
 	}
 }
 
-// awaitAlertDelivery waits until the alert for reviewID that is still being
-// delivered has gone out to every provider, or genAIDeliveryWait has passed
+// awaitAlertDelivery waits until no alert for reviewID is being delivered,
+// including alerts for the review that start while it waits
 func awaitAlertDelivery(reviewID string) {
-	pending, ok := alertDeliveries.Load(reviewID)
-	if !ok {
-		return
-	}
-	log.Debug().
-		Str("review_id", reviewID).
-		Msg("Waiting for alert delivery before sending GenAI update")
-
-	done := make(chan struct{})
-	go func() {
-		pending.(*sync.WaitGroup).Wait()
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-time.After(genAIDeliveryWait):
-		log.Warn().
+	var waited any
+	for {
+		pending, ok := alertDeliveries.Load(reviewID)
+		if !ok || pending == waited {
+			return
+		}
+		log.Debug().
 			Str("review_id", reviewID).
-			Msg("Alert still being delivered, sending GenAI update anyway")
+			Msg("Waiting for alert delivery before sending GenAI update")
+		pending.(*sync.WaitGroup).Wait()
+		waited = pending
 	}
 }
 

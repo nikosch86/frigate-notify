@@ -239,7 +239,7 @@ func TestProcessGenAIReviewUpdateDropped(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newGenAIUpdateFixture(t, tc.frigateStatus, genaiDetectionJSON)
-			setReviewNotified("rev-1")
+			setReviewNotified("rev-1", "det-1")
 			tc.configure()
 
 			processGenAIReviewUpdate(tc.review)
@@ -275,7 +275,7 @@ func TestProcessGenAIReviewUpdateSendsEnrichedAlert(t *testing.T) {
 				PotentialThreatLevel: tc.threatLevel,
 				Observations:         []string{"A van arrives.", "A parcel is left."},
 			}
-			setReviewNotified("rev-1")
+			setReviewNotified("rev-1", "det-1")
 
 			processGenAIReviewUpdate(genaiReview("rev-1", []string{"det-1"}, meta))
 
@@ -377,8 +377,8 @@ func TestReviewSkipsObjectsAlreadyNotifiedOnZone(t *testing.T) {
 	review := genaiReview("rev-2", []string{"det-old", "det-new"}, nil)
 	review.Severity = "alert"
 	processReview(review)
-	if got := f.waitForWebhook(t); got["event_id"] != "det-new" {
-		t.Errorf("alert for event %q, want the new object det-new", got["event_id"])
+	if got := f.waitForWebhook(t); got["event_id"] != "det-new" || got["review_id"] != "rev-2" {
+		t.Errorf("alert for event %q review %q, want the new object det-new in rev-2", got["event_id"], got["review_id"])
 	}
 
 	config.Internal.Status.LastNotification = time.Time{}
@@ -410,5 +410,67 @@ func TestReviewFilteredDoesNotMarkZones(t *testing.T) {
 	processReview(later)
 	if got := f.waitForWebhook(t); got["event_id"] != "det-person" {
 		t.Errorf("alert for event %q, want det-person", got["event_id"])
+	}
+}
+
+// TestReviewSkipsObjectsAlreadyNotifiedWithNotifyOnce checks that with
+// notify_once an object that already alerted is skipped too, not a veto.
+func TestReviewSkipsObjectsAlreadyNotifiedWithNotifyOnce(t *testing.T) {
+	f := newGenAIUpdateFixture(t, http.StatusOK, genaiDetectionJSON)
+	f.detections = map[string]string{
+		"det-old": zoneTestDetection("det-old", "person"),
+		"det-new": zoneTestDetection("det-new", "person"),
+	}
+	config.ConfigData.Alerts.General.NotifyOnce = true
+	setZoneAlerted(models.Event{ID: "det-old", CurrentZones: []string{"porch"}})
+
+	review := genaiReview("rev-2", []string{"det-old", "det-new"}, nil)
+	review.Severity = "alert"
+	processReview(review)
+	if got := f.waitForWebhook(t); got["event_id"] != "det-new" {
+		t.Errorf("alert for event %q, want the new object det-new", got["event_id"])
+	}
+}
+
+// TestGenAIUpdateLeadsWithAlertedObject checks that when a review alerted for a
+// new object while skipping an older one, the alert carries the review's GenAI
+// metadata and the GenAI update leads with that same new object.
+func TestGenAIUpdateLeadsWithAlertedObject(t *testing.T) {
+	f := newGenAIUpdateFixture(t, http.StatusOK, genaiDetectionJSON)
+	f.detections = map[string]string{
+		"det-old": zoneTestDetection("det-old", "car"),
+		"det-new": zoneTestDetection("det-new", "person"),
+	}
+	setZoneAlerted(models.Event{ID: "det-old", CurrentZones: []string{"porch"}})
+
+	meta := &models.ReviewMetadata{Title: "Visitor at the porch"}
+	review := genaiReview("rev-2", []string{"det-old", "det-new"}, meta)
+	review.Severity = "alert"
+	processReview(review)
+	if got := f.waitForWebhook(t); got["event_id"] != "det-new" || got["title"] != meta.Title {
+		t.Fatalf("alert = %v, want det-new with title %q", got, meta.Title)
+	}
+
+	processGenAIReviewUpdate(review)
+	if got := f.waitForWebhook(t); got["event_id"] != "det-new" || got["genai_update"] != "true" {
+		t.Errorf("GenAI update = %v, want it led by the alerted object det-new", got)
+	}
+}
+
+// TestEventZoneAlertsOnce checks that in events mode an object alerts once per
+// zone: the same event in the same zone does not alert again.
+func TestEventZoneAlertsOnce(t *testing.T) {
+	f := newGenAIUpdateFixture(t, http.StatusOK, genaiDetectionJSON)
+	event := models.Event{ID: "evt-1", Camera: "front_door", Label: "person", HasClip: true, Zones: []string{"porch"}, CurrentZones: []string{"porch"}}
+
+	processEvent(event)
+	if got := f.waitForWebhook(t); got["event_id"] != "evt-1" {
+		t.Fatalf("alert for event %q, want evt-1", got["event_id"])
+	}
+
+	config.Internal.Status.LastNotification = time.Time{}
+	processEvent(event)
+	if !config.Internal.Status.LastNotification.IsZero() {
+		t.Error("same event in the same zone should not alert again")
 	}
 }

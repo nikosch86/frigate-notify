@@ -38,3 +38,21 @@ func TestReviewEndKeepsZoneAlerts(t *testing.T) {
 		t.Error("object should still count as alerted on its zone after the review ended")
 	}
 }
+
+// TestEventEndClearsZoneAlerts checks that in events mode a tracked object's end
+// still clears its zone alerts, since its lifetime is over.
+func TestEventEndClearsZoneAlerts(t *testing.T) {
+	InitZoneCache()
+	defer CloseZoneCache()
+	event := models.Event{ID: "evt-1", Camera: "back_gate", CurrentZones: []string{"in"}}
+	setZoneAlerted(event)
+
+	handleMQTTMsg(nil, fakeMQTTMessage{
+		topic:   "frigate/events",
+		payload: `{"type":"end","after":{"id":"evt-1","camera":"back_gate","current_zones":["in"]}}`,
+	})
+
+	if getCachebyID(event.ID) != nil {
+		t.Error("object should no longer count as alerted once its event ended")
+	}
+}
