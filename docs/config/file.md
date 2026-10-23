@@ -311,6 +311,8 @@ This config section allows control over whether to generate alerts on all zones,
 
     In order to reduce the number of notifications generated, this app will only alert on the *first time* the detected object enters a zone.
 
+    In `reviews` mode this holds for the lifetime of the tracked object, even when it spans several Frigate reviews: an object that already alerted on a zone does not alert on it again in a later review. This is remembered for up to 1 hour.
+
     For example, let's say you have a camera in your front yard with zones for sidewalk, driveway, and lawn - but only allow notifications for driveway and lawn. During an event someone was detected originally on the sidewalk, then driveway, lawn, and back to driveway. In this case, you should only receive two notifications. Once for the first time the person entered the driveway zone, and a second when they entered the lawn zone. 
 
     **With Web API event query**, we only query the event from Frigate one time. So currently, only one alert would be sent depending on the detected zones at the time the web API was queried for new events.

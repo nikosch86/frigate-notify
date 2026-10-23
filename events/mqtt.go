@@ -148,16 +148,11 @@ func handleMQTTMsg(client mqtt.Client, msg mqtt.Message) {
 				Msg("GenAI review update received")
 			processGenAIReviewUpdate(review.After.Review)
 		case "end":
+			// Zone alerts are kept until the cache TTL expires, so a tracked
+			// object alerts once per zone even when it spans several reviews
 			log.Debug().
 				Str("review_id", review.After.ID).
 				Msg("Review ended")
-			for _, detection := range review.After.Data.Detections {
-				delZoneAlerted(models.Event{
-					ID:           detection,
-					Camera:       review.After.Camera,
-					CurrentZones: review.After.Data.Zones,
-				})
-			}
 		}
 	case "events":
 		var event models.MQTTEvent
