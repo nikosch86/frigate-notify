@@ -9,6 +9,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync"
 	"text/template"
 	"time"
 
@@ -31,6 +32,19 @@ var TemplateFiles fs.FS
 var NotifCacheSet func(reviewID, provider, messageID string)
 var NotifCacheGet func(reviewID, provider string) string
 
+// ReviewNotifiedSet is set by the events package to mark a review as notified.
+var ReviewNotifiedSet func(reviewID string)
+
+// alertDeliveries holds the provider sends still running for a review's alert,
+// so a GenAI update arriving meanwhile waits for them and edits the delivered
+// message instead of sending a second alert.
+var alertDeliveries sync.Map // review ID -> *sync.WaitGroup
+
+// genAIDeliveryWait bounds how long a GenAI update waits for that delivery; it
+// covers snapshot and clip retries plus a clip re-encode. It is a var so tests
+// can shorten it.
+var genAIDeliveryWait = 5 * time.Minute
+
 type notifMeta struct {
 	name  string
 	index int
@@ -38,6 +52,29 @@ type notifMeta struct {
 
 // SendAlert forwards alert information to all enabled alerting methods
 func SendAlert(events []models.Event) {
+	var deliveries sync.WaitGroup
+	if len(events) > 0 && events[0].Extra.ReviewID != "" {
+		reviewID := events[0].Extra.ReviewID
+		if events[0].Extra.IsGenAIUpdate {
+			awaitAlertDelivery(reviewID)
+		} else {
+			// Hold the delivery open until every provider send has been started
+			deliveries.Add(1)
+			alertDeliveries.Store(reviewID, &deliveries)
+			// Mark the review notified only once its delivery can be waited on
+			if ReviewNotifiedSet != nil {
+				ReviewNotifiedSet(reviewID)
+			}
+			defer func() {
+				deliveries.Done()
+				go func() {
+					deliveries.Wait()
+					alertDeliveries.CompareAndDelete(reviewID, &deliveries)
+				}()
+			}()
+		}
+	}
+
 	config.Internal.Status.LastNotification = time.Now()
 
 	// Reset summary idle timer (skip for GenAI updates to avoid re-triggering)
@@ -71,7 +108,7 @@ func SendAlert(events []models.Event) {
 		if profile.Enabled {
 			provider := notifMeta{name: "apprise_api", index: id}
 			if checkAlertFilters(events, profile.Filters, provider) {
-				go SendAppriseAPI(event, bytes.NewReader(snap), provider)
+				deliveries.Go(func() { SendAppriseAPI(event, bytes.NewReader(snap), provider) })
 			}
 		}
 	}
@@ -80,7 +117,7 @@ func SendAlert(events []models.Event) {
 		if profile.Enabled {
 			provider := notifMeta{name: "discord", index: id}
 			if checkAlertFilters(events, profile.Filters, provider) {
-				go SendDiscordMessage(event, bytes.NewReader(snap), provider)
+				deliveries.Go(func() { SendDiscordMessage(event, bytes.NewReader(snap), provider) })
 			}
 		}
 	}
@@ -89,7 +126,7 @@ func SendAlert(events []models.Event) {
 		if profile.Enabled {
 			provider := notifMeta{name: "gotify", index: id}
 			if checkAlertFilters(events, profile.Filters, provider) {
-				go SendGotifyPush(event, provider)
+				deliveries.Go(func() { SendGotifyPush(event, provider) })
 			}
 		}
 	}
@@ -98,7 +135,7 @@ func SendAlert(events []models.Event) {
 		if profile.Enabled {
 			provider := notifMeta{name: "matrix", index: id}
 			if checkAlertFilters(events, profile.Filters, provider) {
-				go SendMatrix(event, bytes.NewReader(snap), provider)
+				deliveries.Go(func() { SendMatrix(event, bytes.NewReader(snap), provider) })
 			}
 		}
 	}
@@ -107,7 +144,7 @@ func SendAlert(events []models.Event) {
 		if profile.Enabled {
 			provider := notifMeta{name: "mattermost", index: id}
 			if checkAlertFilters(events, profile.Filters, provider) {
-				go SendMattermost(event, provider)
+				deliveries.Go(func() { SendMattermost(event, provider) })
 			}
 		}
 	}
@@ -116,7 +153,7 @@ func SendAlert(events []models.Event) {
 		if profile.Enabled {
 			provider := notifMeta{name: "ntfy", index: id}
 			if checkAlertFilters(events, profile.Filters, provider) {
-				go SendNtfyPush(event, bytes.NewReader(snap), provider)
+				deliveries.Go(func() { SendNtfyPush(event, bytes.NewReader(snap), provider) })
 			}
 		}
 	}
@@ -125,7 +162,7 @@ func SendAlert(events []models.Event) {
 		if profile.Enabled {
 			provider := notifMeta{name: "pushover", index: id}
 			if checkAlertFilters(events, profile.Filters, provider) {
-				go SendPushoverMessage(event, bytes.NewReader(snap), provider)
+				deliveries.Go(func() { SendPushoverMessage(event, bytes.NewReader(snap), provider) })
 			}
 		}
 	}
@@ -134,7 +171,7 @@ func SendAlert(events []models.Event) {
 		if profile.Enabled {
 			provider := notifMeta{name: "signal", index: id}
 			if checkAlertFilters(events, profile.Filters, provider) {
-				go SendSignalMessage(event, bytes.NewReader(snap), provider)
+				deliveries.Go(func() { SendSignalMessage(event, bytes.NewReader(snap), provider) })
 			}
 		}
 	}
@@ -143,7 +180,7 @@ func SendAlert(events []models.Event) {
 		if profile.Enabled {
 			provider := notifMeta{name: "smtp", index: id}
 			if checkAlertFilters(events, profile.Filters, provider) {
-				go SendSMTP(event, bytes.NewReader(snap), provider)
+				deliveries.Go(func() { SendSMTP(event, bytes.NewReader(snap), provider) })
 			}
 		}
 	}
@@ -152,7 +189,7 @@ func SendAlert(events []models.Event) {
 		if profile.Enabled {
 			provider := notifMeta{name: "telegram", index: id}
 			if checkAlertFilters(events, profile.Filters, provider) {
-				go SendTelegramMessage(event, bytes.NewReader(snap), provider)
+				deliveries.Go(func() { SendTelegramMessage(event, bytes.NewReader(snap), provider) })
 			}
 		}
 	}
@@ -161,9 +198,34 @@ func SendAlert(events []models.Event) {
 		if profile.Enabled {
 			provider := notifMeta{name: "webhook", index: id}
 			if checkAlertFilters(events, profile.Filters, provider) {
-				go SendWebhook(event, provider)
+				deliveries.Go(func() { SendWebhook(event, provider) })
 			}
 		}
+	}
+}
+
+// awaitAlertDelivery waits until the alert for reviewID that is still being
+// delivered has gone out to every provider, or genAIDeliveryWait has passed
+func awaitAlertDelivery(reviewID string) {
+	pending, ok := alertDeliveries.Load(reviewID)
+	if !ok {
+		return
+	}
+	log.Debug().
+		Str("review_id", reviewID).
+		Msg("Waiting for alert delivery before sending GenAI update")
+
+	done := make(chan struct{})
+	go func() {
+		pending.(*sync.WaitGroup).Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(genAIDeliveryWait):
+		log.Warn().
+			Str("review_id", reviewID).
+			Msg("Alert still being delivered, sending GenAI update anyway")
 	}
 }
 

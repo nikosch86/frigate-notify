@@ -136,8 +136,7 @@ func processReview(review models.Review) {
 			Msg("GenAI metadata applied to notification")
 	}
 
-	// Send alert with snapshot
-	setReviewNotified(review.ID)
+	// Send alert with snapshot; SendAlert marks the review as notified
 	notifier.SendAlert(detections)
 }
 

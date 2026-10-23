@@ -250,6 +250,7 @@ All alert providers (Discord, Gotify, etc) also support optional filters & the a
         - GenAI data may arrive after the initial notification has already been sent
         - Set to `true` to send an updated notification when GenAI data becomes available
         - Updates are only sent for reviews that produced an initial notification
+        - If the initial notification is still being sent (e.g. waiting for the snapshot or clip), the update waits for it to finish, up to 5 minutes
         - Set to `false` to only include GenAI data if it is available at the time of the initial notification
     - **summary_idle_time** (Optional - Default: `300`)
         - Env: `FN_ALERTS__GENERAL__GENAI__SUMMARY_IDLE_TIME`

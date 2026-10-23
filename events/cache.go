@@ -38,6 +38,7 @@ func InitZoneCache() {
 	// Wire up cache functions for notifier package to avoid circular imports
 	notifier.NotifCacheSet = SetNotifSent
 	notifier.NotifCacheGet = GetNotifMessageID
+	notifier.ReviewNotifiedSet = setReviewNotified
 }
 
 func CloseZoneCache() {

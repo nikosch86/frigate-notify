@@ -6,9 +6,11 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/0x2142/frigate-notify/config"
 	"github.com/0x2142/frigate-notify/models"
@@ -52,34 +54,7 @@ func TestTelegramGenAISummaryAfterSnapshotThenClipE2E(t *testing.T) {
 	// Mock Telegram Bot API (records every request in order).
 	tg, reqs, mu := newMockTelegram(t)
 	defer tg.Close()
-
-	// Seam 1: point the production bot constructor at the mock Telegram server.
-	origNewBot := newTelegramBot
-	defer func() { newTelegramBot = origNewBot }()
-	newTelegramBot = func(token string) (*tgbotapi.BotAPI, error) {
-		return tgbotapi.NewBotAPIWithAPIEndpoint(token, tg.URL+"/bot%s/%s")
-	}
-
-	// Seam 2: render with the real on-disk notification templates.
-	origTemplates := TemplateFiles
-	defer func() { TemplateFiles = origTemplates }()
-	TemplateFiles = os.DirFS("..")
-
-	// Seam 3: in-memory notification cache shared between the two sends.
-	notifCache := map[string]string{}
-	var cacheMu sync.Mutex
-	origSet, origGet := NotifCacheSet, NotifCacheGet
-	defer func() { NotifCacheSet, NotifCacheGet = origSet, origGet }()
-	NotifCacheSet = func(rID, provider, msgID string) {
-		cacheMu.Lock()
-		defer cacheMu.Unlock()
-		notifCache[rID+":"+provider] = msgID
-	}
-	NotifCacheGet = func(rID, provider string) string {
-		cacheMu.Lock()
-		defer cacheMu.Unlock()
-		return notifCache[rID+":"+provider]
-	}
+	useTelegramE2ESeams(t, tg)
 
 	// Minimal config required by GetClip + template rendering.
 	config.ConfigData.Frigate.Server = frigate.URL
@@ -99,10 +74,7 @@ func TestTelegramGenAISummaryAfterSnapshotThenClipE2E(t *testing.T) {
 	SendTelegramMessage(alert, bytes.NewReader([]byte("FAKE-SNAPSHOT")), provider)
 
 	// The snapshot message ID must be cached for the later GenAI edit.
-	cacheMu.Lock()
-	cachedID := notifCache[reviewID+":telegram:0"]
-	cacheMu.Unlock()
-	if cachedID != "555" {
+	if cachedID := NotifCacheGet(reviewID, "telegram:0"); cachedID != "555" {
 		t.Fatalf("expected snapshot message ID 555 to be cached, got %q", cachedID)
 	}
 
@@ -194,6 +166,144 @@ func TestTelegramGenAISummaryAfterSnapshotThenClipE2E(t *testing.T) {
 	// Both sends are reported as successful (1 snapshot + 1 GenAI edit).
 	if status.Sent != 2 || status.Failed != 0 {
 		t.Errorf("expected status sent=2 failed=0, got sent=%d failed=%d", status.Sent, status.Failed)
+	}
+}
+
+// TestTelegramGenAIUpdateDuringDeliveryE2E sends a GenAI update while the alert
+// is held at its snapshot download and checks that the update waits, then edits
+// the delivered message's caption after the clip swap so the swap cannot undo it.
+func TestTelegramGenAIUpdateDuringDeliveryE2E(t *testing.T) {
+	const (
+		reviewID   = "review-race-1"
+		genaiTitle = "Person at the front gate"
+	)
+
+	// Mock Frigate: hold the first snapshot download (the original alert's)
+	// until released; serve later snapshots and the clip right away.
+	snapshotRequested := make(chan struct{})
+	releaseSnapshot := make(chan struct{})
+	var firstSnapshot sync.Once
+	frigate := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/snapshot.jpg") {
+			first := false
+			firstSnapshot.Do(func() {
+				first = true
+				close(snapshotRequested)
+			})
+			if first {
+				<-releaseSnapshot
+			}
+			w.Write([]byte("FAKE-SNAPSHOT"))
+			return
+		}
+		w.Write([]byte("FAKE-CLIP-BYTES"))
+	}))
+	defer frigate.Close()
+
+	tg, reqs, mu := newMockTelegram(t)
+	defer tg.Close()
+	useTelegramE2ESeams(t, tg)
+
+	origConfig := config.ConfigData
+	t.Cleanup(func() { config.ConfigData = origConfig })
+	config.ConfigData = config.Config{}
+	config.ConfigData.Frigate.Server = frigate.URL
+	config.ConfigData.Alerts.General.MaxSnapRetry = 2
+	profile := models.Telegram{ChatID: 1, ClipMaxSize: 50, SendClipAfterSnapshot: true}
+	profile.Enabled = true
+	config.ConfigData.Alerts.Telegram = []models.Telegram{profile}
+	config.Internal.Status.Notifications.Telegram = make([]models.NotifierStatus, 1)
+
+	// Both SendAlert calls must have returned before the config is restored.
+	var sends sync.WaitGroup
+	defer sends.Wait()
+
+	alert := models.Event{ID: "evt1", Camera: "front_gate", HasSnapshot: true, HasClip: true}
+	alert.Extra.ReviewID = reviewID
+	sends.Go(func() { SendAlert([]models.Event{alert}) })
+
+	select {
+	case <-snapshotRequested:
+	case <-time.After(5 * time.Second):
+		t.Fatal("original alert never requested its snapshot")
+	}
+
+	update := alert
+	update.Extra.IsGenAIUpdate = true
+	update.Extra.GenAITitle = genaiTitle
+	sends.Go(func() { SendAlert([]models.Event{update}) })
+
+	// Give an update that does not wait the chance to post its own alert.
+	time.Sleep(200 * time.Millisecond)
+	close(releaseSnapshot)
+
+	calls := waitForTelegramCalls(t, reqs, mu, 3)
+	want := []string{"sendPhoto", "editMessageMedia", "editMessageCaption"}
+	if got := endpoints(calls); !slices.Equal(got, want) {
+		t.Fatalf("expected call sequence %v, got %v", want, got)
+	}
+	captionParams, err := url.ParseQuery(calls[2].body)
+	if err != nil {
+		t.Fatalf("could not parse editMessageCaption body: %v", err)
+	}
+	if got := captionParams.Get("message_id"); got != "555" {
+		t.Errorf("editMessageCaption should target the delivered message 555, got %q", got)
+	}
+	if caption := captionParams.Get("caption"); !strings.Contains(caption, genaiTitle) {
+		t.Errorf("edited caption should contain the GenAI title %q, got: %q", genaiTitle, caption)
+	}
+}
+
+// useTelegramE2ESeams points the bot constructor at the mock Telegram server,
+// renders with the on-disk notification templates and backs the notification
+// cache with a map, restoring all three when the test ends.
+func useTelegramE2ESeams(t *testing.T, tg *httptest.Server) {
+	t.Helper()
+
+	origNewBot, origTemplates := newTelegramBot, TemplateFiles
+	origSet, origGet := NotifCacheSet, NotifCacheGet
+	t.Cleanup(func() {
+		newTelegramBot, TemplateFiles = origNewBot, origTemplates
+		NotifCacheSet, NotifCacheGet = origSet, origGet
+	})
+
+	newTelegramBot = func(token string) (*tgbotapi.BotAPI, error) {
+		return tgbotapi.NewBotAPIWithAPIEndpoint(token, tg.URL+"/bot%s/%s")
+	}
+	TemplateFiles = os.DirFS("..")
+
+	notifCache := map[string]string{}
+	var cacheMu sync.Mutex
+	NotifCacheSet = func(rID, provider, msgID string) {
+		cacheMu.Lock()
+		defer cacheMu.Unlock()
+		notifCache[rID+":"+provider] = msgID
+	}
+	NotifCacheGet = func(rID, provider string) string {
+		cacheMu.Lock()
+		defer cacheMu.Unlock()
+		return notifCache[rID+":"+provider]
+	}
+}
+
+// waitForTelegramCalls polls the mock Telegram server until it has received n
+// requests other than getMe, or 5s pass, and returns those requests in order.
+func waitForTelegramCalls(t *testing.T, reqs *[]capturedReq, mu *sync.Mutex, n int) []capturedReq {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		mu.Lock()
+		var calls []capturedReq
+		for _, r := range *reqs {
+			if r.endpoint != "getMe" {
+				calls = append(calls, r)
+			}
+		}
+		mu.Unlock()
+		if len(calls) >= n || time.Now().After(deadline) {
+			return calls
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
